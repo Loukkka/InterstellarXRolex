@@ -1,0 +1,19 @@
+{
+  "name": "interstellar-x-rolex",
+  "version": "1.0.0",
+  "description": "Expérience VR interactive A-Frame - Interstellar X Rolex",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && gh-pages -d dist"
+  },
+  "keywords": ["aframe", "vr", "webxr", "rolex", "interstellar"],
+  "author": "Louka",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "gh-pages": "^6.1.0"
+  }
+}

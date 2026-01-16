@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Interstellar X Rolex - VR</title>
+	<style>
+		body { margin: 0; background: #000; }
+		#hud {
+			position: fixed;
+			top: 16px;
+			left: 16px;
+			padding: 14px 18px;
+			background: rgba(5, 8, 20, 0.85);
+			border: 1px solid rgba(217, 176, 102, 0.5);
+			border-radius: 10px;
+			max-width: 340px;
+			font: 14px/1.4 "Helvetica Neue", sans-serif;
+			color: #e0e0e0;
+			z-index: 100;
+		}
+		#hud strong { color: #d9b066; }
+		#debug {
+			position: fixed;
+			bottom: 16px;
+			left: 16px;
+			padding: 10px 14px;
+			background: rgba(0,0,0,0.8);
+			color: #0f0;
+			font: 12px monospace;
+			z-index: 100;
+			border-radius: 6px;
+		}
+	</style>
+	<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+	<script>
+		// === AUDIO: Génération dynamique de clicks ===
+		function createClickSound(freq, duration) {
+			const ctx = new (window.AudioContext || window.webkitAudioContext)();
+			const sampleRate = ctx.sampleRate;
+			const samples = Math.floor(duration * sampleRate);
+			const buffer = ctx.createBuffer(1, samples, sampleRate);
+			const data = buffer.getChannelData(0);
+			for (let i = 0; i < samples; i++) {
+				const t = i / sampleRate;
+				const env = Math.exp(-i / (samples * 0.15));
+				data[i] = Math.sin(2 * Math.PI * freq * t) * env * 0.8;
+			}
+			return { ctx, buffer };
+		}
+
+		// === TICK MANAGER: Gère le son de fond ===
+		AFRAME.registerComponent("tick-manager", {
+			init() {
+				this.mode = "base";
+				this.timer = null;
+				this.audioCtx = null;
+				this.sounds = {};
+				
+				// Créer les sons
+				const base = createClickSound(1200, 0.05);
+				const slow = createClickSound(600, 0.12);
+				const fast = createClickSound(2000, 0.03);
+				
+				this.audioCtx = base.ctx;
+				this.sounds = {
+					base: { buffer: base.buffer, interval: 1000 },
+					slow: { buffer: slow.buffer, interval: 2000 },
+					fast: { buffer: fast.buffer, interval: 350 }
+				};
+				
+				// Démarrer après interaction utilisateur
+				document.addEventListener("click", () => this.start(), { once: true });
+				document.addEventListener("keydown", () => this.start(), { once: true });
+			},
+			start() {
+				if (this.timer) return;
+				this.setMode("base");
+			},
+			setMode(mode) {
+				this.mode = mode;
+				if (this.timer) clearInterval(this.timer);
+				
+				const sound = this.sounds[mode] || this.sounds.base;
+				this.playClick(sound.buffer);
+				
+				this.timer = setInterval(() => {
+					this.playClick(sound.buffer);
+				}, sound.interval);
+				
+				document.getElementById("debug").textContent = "Mode: " + mode;
+			},
+			playClick(buffer) {
+				if (!this.audioCtx || this.audioCtx.state === "suspended") {
+					this.audioCtx?.resume();
+				}
+				const source = this.audioCtx.createBufferSource();
+				source.buffer = buffer;
+				source.connect(this.audioCtx.destination);
+				source.start();
+			}
+		});
+
+		// === BOUNDARY: Bloque l'utilisateur dans le cube 4x4x4 ===
+		AFRAME.registerComponent("boundary-limit", {
+			schema: {
+				minX: { type: "number", default: -2 },
+				maxX: { type: "number", default: 2 },
+				minZ: { type: "number", default: -2 },
+				maxZ: { type: "number", default: 2 }
+			},
+			init() {
+				this.camPos = new THREE.Vector3();
+			},
+			tick() {
+				const camera = this.el.sceneEl.camera;
+				if (!camera) return;
+				
+				// Obtenir position monde de la caméra
+				camera.getWorldPosition(this.camPos);
+				
+				const d = this.data;
+				let needsClamp = false;
+				let clampedX = this.camPos.x;
+				let clampedZ = this.camPos.z;
+				
+				// Vérifier limites X
+				if (this.camPos.x < d.minX) { clampedX = d.minX; needsClamp = true; }
+				if (this.camPos.x > d.maxX) { clampedX = d.maxX; needsClamp = true; }
+				
+				// Vérifier limites Z
+				if (this.camPos.z < d.minZ) { clampedZ = d.minZ; needsClamp = true; }
+				if (this.camPos.z > d.maxZ) { clampedZ = d.maxZ; needsClamp = true; }
+				
+				// Si hors limites, repositionner le rig
+				if (needsClamp) {
+					const rigPos = this.el.object3D.position;
+					rigPos.x += (clampedX - this.camPos.x);
+					rigPos.z += (clampedZ - this.camPos.z);
+				}
+			}
+		});
+
+		// === TIME ZONE: Détection de présence dans les cercles ===
+		AFRAME.registerComponent("time-zone", {
+			schema: {
+				mode: { type: "string", default: "slow" },
+				radius: { type: "number", default: 1.0 },
+				lightSpeed: { type: "number", default: 5000 },
+				needleSpeed: { type: "number", default: 3000 }
+			},
+			init() {
+				this.active = false;
+				this.light = null;
+				this.needleMinute = null;
+				this.needleHour = null;
+				this.zoneCenter = new THREE.Vector3();
+				
+				// Trouver les éléments associés
+				const id = this.el.id;
+				if (id === "zone-left") {
+					this.light = document.getElementById("light-left");
+					this.needleMinute = document.getElementById("needle-minute-left");
+					this.needleHour = document.getElementById("needle-hour-left");
+				} else if (id === "zone-right") {
+					this.light = document.getElementById("light-right");
+					this.needleMinute = document.getElementById("needle-minute-right");
+					this.needleHour = document.getElementById("needle-hour-right");
+				}
+			},
+			tick() {
+				// Récupérer la caméra
+				const camera = this.el.sceneEl.camera;
+				if (!camera) return;
+				
+				// Position de la caméra dans le monde
+				const camPos = new THREE.Vector3();
+				camera.getWorldPosition(camPos);
+				
+				// Position du cercle
+				this.el.object3D.getWorldPosition(this.zoneCenter);
+				
+				// Distance horizontale uniquement (ignorer Y)
+				const dx = camPos.x - this.zoneCenter.x;
+				const dz = camPos.z - this.zoneCenter.z;
+				const dist = Math.sqrt(dx * dx + dz * dz);
+				
+				const wasActive = this.active;
+				this.active = dist < this.data.radius;
+				
+				if (this.active && !wasActive) {
+					this.enterZone();
+				} else if (!this.active && wasActive) {
+					this.leaveZone();
+				}
+			},
+			enterZone() {
+				console.log("ENTER:", this.data.mode);
+				
+				// Changer le son
+				const manager = document.getElementById("tick-manager");
+				if (manager?.components?.["tick-manager"]) {
+					manager.components["tick-manager"].setMode(this.data.mode);
+				}
+				
+				// Activer la lumière
+				if (this.light) {
+					this.light.setAttribute("animation__orbit", {
+						property: "rotation",
+						to: "0 360 0",
+						loop: true,
+						dur: this.data.lightSpeed,
+						easing: "linear"
+					});
+					this.light.querySelector("[light]")?.setAttribute("light", "intensity", 1.5);
+				}
+				
+				// Activer l'aiguille des minutes (rotation rapide)
+				if (this.needleMinute) {
+					this.needleMinute.setAttribute("animation__spin", {
+						property: "rotation",
+						to: "0 360 0",
+						loop: true,
+						dur: this.data.needleSpeed,
+						easing: "linear"
+					});
+				}
+				
+				// Activer l'aiguille des heures (12x plus lente)
+				if (this.needleHour) {
+					this.needleHour.setAttribute("animation__spin", {
+						property: "rotation",
+						to: "0 360 0",
+						loop: true,
+						dur: this.data.needleSpeed * 12,
+						easing: "linear"
+					});
+				}
+			},
+			leaveZone() {
+				console.log("LEAVE:", this.data.mode);
+				
+				// Revenir au son normal
+				const manager = document.getElementById("tick-manager");
+				if (manager?.components?.["tick-manager"]) {
+					manager.components["tick-manager"].setMode("base");
+				}
+				
+				// Désactiver la lumière
+				if (this.light) {
+					this.light.removeAttribute("animation__orbit");
+					this.light.querySelector("[light]")?.setAttribute("light", "intensity", 0);
+				}
+				
+				// Désactiver les aiguilles
+				if (this.needleMinute) {
+					this.needleMinute.removeAttribute("animation__spin");
+				}
+				if (this.needleHour) {
+					this.needleHour.removeAttribute("animation__spin");
+				}
+			}
+		});
+	</script>
+</head>
+<body>
+	<div id="hud">
+		<strong>Interstellar × Rolex</strong><br>
+		Marchez sur un cercle pour modifier le temps.<br>
+		⬅ Gauche : temps ralenti &nbsp; | &nbsp; Droite : temps accéléré ➡
+	</div>
+	<div id="debug">Cliquez pour activer le son</div>
+
+	<a-scene shadow="type: pcfsoft" renderer="colorManagement: true; exposure: 1.2">
+		<!-- Assets -->
+		<a-assets>
+			<img id="space360" src="./space360.jpg">
+		</a-assets>
+
+		<!-- Tick Manager -->
+		<a-entity id="tick-manager" tick-manager></a-entity>
+
+		<!-- Éclairage ambiant -->
+		<a-entity light="type: ambient; color: #6080a0; intensity: 0.5"></a-entity>
+		<a-entity light="type: directional; color: #ffe0c0; intensity: 0.4" position="1 3 1"></a-entity>
+
+		<!-- Skybox 360 (monde extérieur) -->
+		<a-sky src="#space360" rotation="0 -90 0"></a-sky>
+
+		<!-- Cube 4x4x4 (limites invisibles) -->
+
+		<!-- ========== CERCLE GAUCHE (SLOW) ========== -->
+		<a-entity id="zone-left" position="-1 0.01 0" 
+			time-zone="mode: slow; radius: 0.9; lightSpeed: 9000; needleSpeed: 6000">
+			
+			<!-- Anneau doré -->
+			<a-ring radius-inner="0.75" radius-outer="0.85" rotation="-90 0 0" 
+				material="color: #d9b066; opacity: 0.9; metalness: 0.6"></a-ring>
+			<a-ring radius-inner="0.40" radius-outer="0.42" rotation="-90 0 0" 
+				material="color: #d9b066; opacity: 0.6"></a-ring>
+			
+			<!-- Aiguille des minutes (longue, rapide) -->
+			<a-entity id="needle-minute-left" position="0 0.03 0" rotation="0 0 0">
+				<a-box width="0.65" height="0.012" depth="0.020" position="0.27 0 0" 
+					material="color: #d9b066; metalness: 0.8"></a-box>
+			</a-entity>
+			
+			<!-- Aiguille des heures (courte, lente) -->
+			<a-entity id="needle-hour-left" position="0 0.05 0" rotation="0 90 0">
+				<a-box width="0.45" height="0.018" depth="0.025" position="0.17 0 0" 
+					material="color: #c9a050; metalness: 0.8"></a-box>
+			</a-entity>
+		</a-entity>
+
+		<!-- Lumière gauche -->
+		<a-entity id="light-left" position="-1 1.5 0">
+			<a-entity position="0.5 0 0">
+				<a-entity light="type: spot; color: #ffd080; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
+					position="0 0 0" rotation="-90 0 0"></a-entity>
+				<a-sphere radius="0.04" material="color: #ffd080; emissive: #ffd080; emissiveIntensity: 0.5"></a-sphere>
+			</a-entity>
+		</a-entity>
+
+		<!-- Pile de livres (modèle 3D) -->
+		<a-entity id="books" position="-1 0 0">
+			<a-gltf-model src="stack_of_books.glb" shadow="cast: true; receive: true" 
+				scale="0.20 0.20 0.20" position="0 0.15 0"></a-gltf-model>
+		</a-entity>
+
+		<!-- ========== CERCLE DROIT (FAST) ========== -->
+		<a-entity id="zone-right" position="1 0.01 0" 
+			time-zone="mode: fast; radius: 0.9; lightSpeed: 1500; needleSpeed: 800">
+			
+			<!-- Anneau rose -->
+			<a-ring radius-inner="0.75" radius-outer="0.85" rotation="-90 0 0" 
+				material="color: #e85f8d; opacity: 0.9; metalness: 0.6"></a-ring>
+			<a-ring radius-inner="0.40" radius-outer="0.42" rotation="-90 0 0" 
+				material="color: #e85f8d; opacity: 0.6"></a-ring>
+			
+			<!-- Aiguille des minutes (longue, rapide) -->
+			<a-entity id="needle-minute-right" position="0 0.03 0" rotation="0 0 0">
+				<a-box width="0.65" height="0.012" depth="0.020" position="0.27 0 0" 
+					material="color: #e85f8d; metalness: 0.8"></a-box>
+			</a-entity>
+			
+			<!-- Aiguille des heures (courte, lente) -->
+			<a-entity id="needle-hour-right" position="0 0.05 0" rotation="0 90 0">
+				<a-box width="0.45" height="0.018" depth="0.025" position="0.17 0 0" 
+					material="color: #d04a78; metalness: 0.8"></a-box>
+			</a-entity>
+		</a-entity>
+
+		<!-- Lumière droite -->
+		<a-entity id="light-right" position="1 1.5 0">
+			<a-entity position="0.5 0 0">
+				<a-entity light="type: spot; color: #ff80a0; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
+					position="0 0 0" rotation="-90 0 0"></a-entity>
+				<a-sphere radius="0.04" material="color: #ff80a0; emissive: #ff80a0; emissiveIntensity: 0.5"></a-sphere>
+			</a-entity>
+		</a-entity>
+
+		<!-- Casque astronaute (modèle 3D) -->
+		<a-entity id="helmet" position="1 0 0">
+			<a-gltf-model src="astronaut_helmet.glb" shadow="cast: true; receive: true" 
+				scale="0.018 0.018 0.018" position="0 0.0 0" rotation="-15 0 0"></a-gltf-model>
+		</a-entity>
+
+		<!-- Caméra avec limites -->
+		<a-entity id="rig" position="0 0 1.5" boundary-limit>
+			<a-camera wasd-controls="acceleration: 8" look-controls position="0 1.6 0">
+				<a-cursor color="#d9b066" fuse="false" raycaster="objects: none"></a-cursor>
+			</a-camera>
+		</a-entity>
+	</a-scene>
+</body>
+</html>
