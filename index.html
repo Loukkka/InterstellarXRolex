@@ -6,6 +6,7 @@
 	<title>Interstellar X Rolex - VR</title>
 	<style>
 		body { margin: 0; background: #000; }
+		#clock-audio { display: none; }
 		#hud {
 			position: fixed;
 			top: 16px;
@@ -34,72 +35,31 @@
 	</style>
 	<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 	<script>
-		// === AUDIO: Génération dynamique de clicks ===
-		function createClickSound(freq, duration) {
-			const ctx = new (window.AudioContext || window.webkitAudioContext)();
-			const sampleRate = ctx.sampleRate;
-			const samples = Math.floor(duration * sampleRate);
-			const buffer = ctx.createBuffer(1, samples, sampleRate);
-			const data = buffer.getChannelData(0);
-			for (let i = 0; i < samples; i++) {
-				const t = i / sampleRate;
-				const env = Math.exp(-i / (samples * 0.15));
-				data[i] = Math.sin(2 * Math.PI * freq * t) * env * 0.8;
-			}
-			return { ctx, buffer };
-		}
-
-		// === TICK MANAGER: Gère le son de fond ===
-		AFRAME.registerComponent("tick-manager", {
-			init() {
-				this.mode = "base";
-				this.timer = null;
-				this.audioCtx = null;
-				this.sounds = {};
-				
-				// Créer les sons
-				const base = createClickSound(1200, 0.05);
-				const slow = createClickSound(600, 0.12);
-				const fast = createClickSound(2000, 0.03);
-				
-				this.audioCtx = base.ctx;
-				this.sounds = {
-					base: { buffer: base.buffer, interval: 1000 },
-					slow: { buffer: slow.buffer, interval: 2000 },
-					fast: { buffer: fast.buffer, interval: 350 }
-				};
-				
-				// Démarrer après interaction utilisateur
-				document.addEventListener("click", () => this.start(), { once: true });
-				document.addEventListener("keydown", () => this.start(), { once: true });
-			},
-			start() {
-				if (this.timer) return;
-				this.setMode("base");
-			},
-			setMode(mode) {
-				this.mode = mode;
-				if (this.timer) clearInterval(this.timer);
-				
-				const sound = this.sounds[mode] || this.sounds.base;
-				this.playClick(sound.buffer);
-				
-				this.timer = setInterval(() => {
-					this.playClick(sound.buffer);
-				}, sound.interval);
-				
-				document.getElementById("debug").textContent = "Mode: " + mode;
-			},
-			playClick(buffer) {
-				if (!this.audioCtx || this.audioCtx.state === "suspended") {
-					this.audioCtx?.resume();
-				}
-				const source = this.audioCtx.createBufferSource();
-				source.buffer = buffer;
-				source.connect(this.audioCtx.destination);
-				source.start();
-			}
+		// === AUDIO HORLOGE: Gestion de la vitesse de lecture ===
+		let clockAudio = null;
+		
+		document.addEventListener("DOMContentLoaded", () => {
+			clockAudio = document.getElementById("clock-audio");
+			clockAudio.volume = 0.9;
+			clockAudio.playbackRate = 1.0; // Vitesse normale par défaut
+			
+			const startClockAudio = () => {
+				clockAudio.play().catch(e => console.log("Audio play prevented:", e));
+				document.removeEventListener("click", startClockAudio);
+				document.removeEventListener("keydown", startClockAudio);
+			};
+			
+			document.addEventListener("click", startClockAudio);
+			document.addEventListener("keydown", startClockAudio);
 		});
+		
+		// === AUDIO MANAGER: Contrôle la vitesse du son ===
+		function setClockSpeed(speed) {
+			if (clockAudio) {
+				clockAudio.playbackRate = speed;
+				document.getElementById("debug").textContent = "Vitesse: x" + speed;
+			}
+		}
 
 		// === BOUNDARY: Bloque l'utilisateur dans le cube 4x4x4 ===
 		AFRAME.registerComponent("boundary-limit", {
@@ -197,10 +157,11 @@
 			enterZone() {
 				console.log("ENTER:", this.data.mode);
 				
-				// Changer le son
-				const manager = document.getElementById("tick-manager");
-				if (manager?.components?.["tick-manager"]) {
-					manager.components["tick-manager"].setMode(this.data.mode);
+				// Changer la vitesse du son
+				if (this.data.mode === "slow") {
+					setClockSpeed(0.5); // Ralenti x0.5
+				} else if (this.data.mode === "fast") {
+					setClockSpeed(2.0); // Accéléré x2
 				}
 				
 				// Activer la lumière
@@ -240,11 +201,8 @@
 			leaveZone() {
 				console.log("LEAVE:", this.data.mode);
 				
-				// Revenir au son normal
-				const manager = document.getElementById("tick-manager");
-				if (manager?.components?.["tick-manager"]) {
-					manager.components["tick-manager"].setMode("base");
-				}
+				// Revenir à la vitesse normale
+				setClockSpeed(1.0);
 				
 				// Désactiver la lumière
 				if (this.light) {
@@ -264,6 +222,11 @@
 	</script>
 </head>
 <body>
+	<!-- Son d'horloge en fond -->
+	<audio id="clock-audio" loop>
+		<source src="./Echoing Clock Tick  HQ Sound Effect (online-video-cutter.com).mp3" type="audio/mpeg">
+	</audio>
+	
 	<div id="hud">
 		<strong>Interstellar × Rolex</strong><br>
 		Marchez sur un cercle pour modifier le temps.<br>
@@ -274,11 +237,8 @@
 	<a-scene shadow="type: pcfsoft" renderer="colorManagement: true; exposure: 1.2">
 		<!-- Assets - ne bloque pas la scène si les modèles mettent du temps -->
 		<a-assets timeout="10000">
-			<img id="space360" src="./space360.jpg" crossorigin="anonymous">
+			<img id="space360" src="./public/space360.jpg" crossorigin="anonymous">
 		</a-assets>
-
-		<!-- Tick Manager -->
-		<a-entity id="tick-manager" tick-manager></a-entity>
 
 		<!-- Éclairage ambiant -->
 		<a-entity light="type: ambient; color: #6080a0; intensity: 0.5"></a-entity>
@@ -323,7 +283,7 @@
 
 		<!-- Pile de livres (modèle 3D) -->
 		<a-entity id="books" position="-1 0 0">
-			<a-gltf-model src="./stack_of_books.glb" shadow="cast: true; receive: true" 
+			<a-gltf-model src="./public/stack_of_books.glb" shadow="cast: true; receive: true" 
 				scale="0.20 0.20 0.20" position="0 0.15 0"></a-gltf-model>
 		</a-entity>
 
@@ -361,7 +321,7 @@
 
 		<!-- Casque astronaute (modèle 3D) -->
 		<a-entity id="helmet" position="1 0 0">
-			<a-gltf-model src="./astronaut_helmet.glb" shadow="cast: true; receive: true" 
+			<a-gltf-model src="./public/astronaut_helmet.glb" shadow="cast: true; receive: true" 
 				scale="0.018 0.018 0.018" position="0 0.0 0" rotation="-15 0 0"></a-gltf-model>
 		</a-entity>
 
