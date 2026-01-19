@@ -274,7 +274,7 @@
 	<a-scene shadow="type: pcfsoft" renderer="colorManagement: true; exposure: 1.2">
 		<!-- Assets - ne bloque pas la scène si les modèles mettent du temps -->
 		<a-assets timeout="10000">
-			<img id="space360" src="/space360.jpg" crossorigin="anonymous">
+			<img id="space360" src="./space360.jpg" crossorigin="anonymous">
 		</a-assets>
 
 		<!-- Tick Manager -->
@@ -323,7 +323,7 @@
 
 		<!-- Pile de livres (modèle 3D) -->
 		<a-entity id="books" position="-1 0 0">
-			<a-gltf-model src="/stack_of_books.glb" shadow="cast: true; receive: true" 
+			<a-gltf-model src="./stack_of_books.glb" shadow="cast: true; receive: true" 
 				scale="0.20 0.20 0.20" position="0 0.15 0"></a-gltf-model>
 		</a-entity>
 
@@ -361,7 +361,7 @@
 
 		<!-- Casque astronaute (modèle 3D) -->
 		<a-entity id="helmet" position="1 0 0">
-			<a-gltf-model src="/astronaut_helmet.glb" shadow="cast: true; receive: true" 
+			<a-gltf-model src="./astronaut_helmet.glb" shadow="cast: true; receive: true" 
 				scale="0.018 0.018 0.018" position="0 0.0 0" rotation="-15 0 0"></a-gltf-model>
 		</a-entity>
 
