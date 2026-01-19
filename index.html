@@ -272,9 +272,11 @@
 	<div id="debug">Cliquez pour activer le son</div>
 
 	<a-scene shadow="type: pcfsoft" renderer="colorManagement: true; exposure: 1.2">
-		<!-- Assets -->
-		<a-assets>
+		<!-- Assets avec timeout étendu pour les gros fichiers -->
+		<a-assets timeout="60000">
 			<img id="space360" src="/space360.jpg">
+			<a-asset-item id="books-model" src="/stack_of_books.glb"></a-asset-item>
+			<a-asset-item id="helmet-model" src="/astronaut_helmet.glb"></a-asset-item>
 		</a-assets>
 
 		<!-- Tick Manager -->
@@ -323,7 +325,7 @@
 
 		<!-- Pile de livres (modèle 3D) -->
 		<a-entity id="books" position="-1 0 0">
-			<a-gltf-model src="/stack_of_books.glb" shadow="cast: true; receive: true" 
+			<a-gltf-model src="#books-model" shadow="cast: true; receive: true" 
 				scale="0.20 0.20 0.20" position="0 0.15 0"></a-gltf-model>
 		</a-entity>
 
@@ -361,7 +363,7 @@
 
 		<!-- Casque astronaute (modèle 3D) -->
 		<a-entity id="helmet" position="1 0 0">
-			<a-gltf-model src="/astronaut_helmet.glb" shadow="cast: true; receive: true" 
+			<a-gltf-model src="#helmet-model" shadow="cast: true; receive: true" 
 				scale="0.018 0.018 0.018" position="0 0.0 0" rotation="-15 0 0"></a-gltf-model>
 		</a-entity>
 
