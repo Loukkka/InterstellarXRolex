@@ -75,6 +75,252 @@
 			}
 		}
 
+		// === BOOKSHELF: Contrôle la vitesse d'apparition des livres ===
+		let bookSpawnSpeed = 1.0; // Multiplicateur de vitesse (0.5 = lent, 2 = rapide)
+		
+		function setBookSpawnSpeed(speed) {
+			bookSpawnSpeed = speed;
+		}
+
+		// === BOOKSHELF SPAWNER: Fait apparaître les livres progressivement ===
+		AFRAME.registerComponent("bookshelf-spawner", {
+			schema: {
+				baseInterval: { type: "number", default: 3000 }, // Intervalle de base en ms
+				maxBooks: { type: "number", default: 24 },
+				buildDelay: { type: "number", default: 500 } // Délai entre chaque planche
+			},
+			init() {
+				this.books = [];
+				this.bookIndex = 0;
+				this.lastSpawnTime = 0;
+				this.started = false;
+				this.shelfBuilt = false;
+				this.buildIndex = 0;
+				
+				// Positions des livres sur l'étagère (6 étagères x 4 livres = 24)
+				this.bookPositions = [
+					// Étagère 1 (bas)
+					{ x: -0.45, y: 0.08, z: 0 },
+					{ x: -0.15, y: 0.08, z: 0 },
+					{ x: 0.15, y: 0.08, z: 0 },
+					{ x: 0.45, y: 0.08, z: 0 },
+					// Étagère 2
+					{ x: -0.45, y: 0.43, z: 0 },
+					{ x: -0.15, y: 0.43, z: 0 },
+					{ x: 0.15, y: 0.43, z: 0 },
+					{ x: 0.45, y: 0.43, z: 0 },
+					// Étagère 3
+					{ x: -0.45, y: 0.78, z: 0 },
+					{ x: -0.15, y: 0.78, z: 0 },
+					{ x: 0.15, y: 0.78, z: 0 },
+					{ x: 0.45, y: 0.78, z: 0 },
+					// Étagère 4
+					{ x: -0.45, y: 1.13, z: 0 },
+					{ x: -0.15, y: 1.13, z: 0 },
+					{ x: 0.15, y: 1.13, z: 0 },
+					{ x: 0.45, y: 1.13, z: 0 },
+					// Étagère 5
+					{ x: -0.45, y: 1.48, z: 0 },
+					{ x: -0.15, y: 1.48, z: 0 },
+					{ x: 0.15, y: 1.48, z: 0 },
+					{ x: 0.45, y: 1.48, z: 0 },
+					// Étagère 6 (haut)
+					{ x: -0.45, y: 1.83, z: 0 },
+					{ x: -0.15, y: 1.83, z: 0 },
+					{ x: 0.15, y: 1.83, z: 0 },
+					{ x: 0.45, y: 1.83, z: 0 }
+				];
+				
+				// Couleurs des livres (24 couleurs)
+				this.bookColors = [
+					"#8B4513", "#2F4F4F", "#8B0000", "#191970",
+					"#006400", "#4B0082", "#B8860B", "#2E8B57",
+					"#800000", "#483D8B", "#556B2F", "#8B008B",
+					"#CD853F", "#708090", "#DC143C", "#4169E1",
+					"#228B22", "#9932CC", "#DAA520", "#20B2AA",
+					"#A52A2A", "#6A5ACD", "#808000", "#C71585"
+				];
+				
+				// Éléments de l'étagère à construire
+				this.shelfParts = [];
+				
+				// Démarrer après un clic
+				const startSpawning = () => {
+					this.started = true;
+					this.lastSpawnTime = performance.now();
+					this.buildShelf();
+					document.removeEventListener("click", startSpawning);
+				};
+				document.addEventListener("click", startSpawning);
+			},
+					buildShelf() {
+				// Récupérer toutes les planches de l'étagère si pas encore fait
+				if (this.shelfParts.length === 0) {
+					this.shelfParts = Array.from(this.el.querySelectorAll("a-box"));
+				}
+				
+				// Cacher toutes les planches au début si on part de zéro
+				if (this.buildIndex === 0) {
+					this.shelfParts.forEach(part => {
+						part.setAttribute("scale", "0 0 0");
+					});
+				}
+				
+				// Construire progressivement
+				this.buildNextPart();
+			},
+			buildNextPart() {
+				if (this.buildIndex >= this.shelfParts.length) {
+					this.shelfBuilt = true;
+					this.lastSpawnTime = performance.now();
+					console.log("Étagère construite!");
+					return;
+				}
+				
+				const part = this.shelfParts[this.buildIndex];
+				part.setAttribute("animation__build", {
+					property: "scale",
+					from: "0 0 0",
+					to: "1 1 1",
+					dur: 400,
+					easing: "easeOutBack"
+				});
+				
+				this.buildIndex++;
+				setTimeout(() => this.buildNextPart(), this.data.buildDelay);
+			},
+			removeShelfPart() {
+				if (this.buildIndex <= 0) {
+					this.shelfBuilt = false;
+					console.log("Étagère déconstruite!");
+					return;
+				}
+				
+				this.buildIndex--;
+				const part = this.shelfParts[this.buildIndex];
+				part.setAttribute("animation__unbuild", {
+					property: "scale",
+					to: "0 0 0",
+					dur: 300,
+					easing: "easeInBack"
+				});
+			},
+			tick(time) {
+				if (!this.started) return;
+				
+				// Mode rewind : faire disparaître les livres ET déconstruire l'armoire
+				if (bookSpawnSpeed < 0) {
+					const adjustedInterval = this.data.baseInterval / Math.abs(bookSpawnSpeed);
+					
+					if (time - this.lastSpawnTime > adjustedInterval) {
+						// D'abord retirer les livres
+						if (this.books.length > 0) {
+							this.removeBook();
+						}
+						// Ensuite déconstruire l'armoire
+						else if (this.buildIndex > 0) {
+							this.removeShelfPart();
+						}
+						this.lastSpawnTime = time;
+					}
+					return;
+				}
+				
+				// Mode normal : construire d'abord si nécessaire
+				if (!this.shelfBuilt) {
+					// Reconstruire l'étagère si elle a été déconstruite
+					if (this.buildIndex < this.shelfParts.length) {
+						const adjustedInterval = this.data.buildDelay / bookSpawnSpeed;
+						if (time - this.lastSpawnTime > adjustedInterval) {
+							this.buildNextPart();
+							this.lastSpawnTime = time;
+						}
+					}
+					return; // Attendre que l'étagère soit construite
+				}
+				
+				if (this.bookIndex >= this.data.maxBooks) return;
+				
+				// Calculer l'intervalle ajusté par la vitesse
+				const adjustedInterval = this.data.baseInterval / bookSpawnSpeed;
+				
+				if (time - this.lastSpawnTime > adjustedInterval) {
+					this.spawnBook();
+					this.lastSpawnTime = time;
+				}
+			},
+			removeBook() {
+				if (this.books.length === 0) return;
+				
+				const book = this.books.pop();
+				this.bookIndex--;
+				
+				// Animation de disparition
+				book.setAttribute("animation__vanish", {
+					property: "scale",
+					to: "0 0 0",
+					dur: 400,
+					easing: "easeInBack"
+				});
+				book.setAttribute("animation__rise", {
+					property: "position",
+					to: `${book.getAttribute("position").x} ${book.getAttribute("position").y + 0.5} ${book.getAttribute("position").z}`,
+					dur: 400,
+					easing: "easeInQuad"
+				});
+				
+				// Supprimer après animation
+				setTimeout(() => {
+					if (book.parentNode) {
+						book.parentNode.removeChild(book);
+					}
+				}, 450);
+				
+				console.log("Livre retiré:", this.bookIndex, "restants");
+			},
+			spawnBook() {
+				const pos = this.bookPositions[this.bookIndex];
+				const color = this.bookColors[this.bookIndex];
+				
+				// Créer le livre
+				const book = document.createElement("a-box");
+				book.setAttribute("width", "0.08");
+				book.setAttribute("height", "0.25");
+				book.setAttribute("depth", "0.18");
+				book.setAttribute("position", `${pos.x} ${pos.y + 1} ${pos.z}`);
+				book.setAttribute("material", `color: ${color}; metalness: 0.1; roughness: 0.8`);
+				book.setAttribute("shadow", "cast: true; receive: true");
+				book.setAttribute("scale", "0 0 0");
+				
+				this.el.appendChild(book);
+				
+				// Animation d'apparition (scale up)
+				setTimeout(() => {
+					book.setAttribute("animation__scale", {
+						property: "scale",
+						from: "0 0 0",
+						to: "1 1 1",
+						dur: 500,
+						easing: "easeOutBack"
+					});
+					
+					// Animation de descente vers l'étagère
+					book.setAttribute("animation__fall", {
+						property: "position",
+						to: `${pos.x} ${pos.y} ${pos.z}`,
+						dur: 800,
+						easing: "easeOutBounce",
+						delay: 200
+					});
+				}, 50);
+				
+				this.books.push(book);
+				this.bookIndex++;
+				
+				console.log("Livre apparu:", this.bookIndex, "/ 12");
+			}
+		});
+
 		// === BOUNDARY: Bloque l'utilisateur dans le cube 4x4x4 ===
 		AFRAME.registerComponent("boundary-limit", {
 			schema: {
@@ -140,6 +386,10 @@
 					this.light = document.getElementById("light-right");
 					this.needleMinute = document.getElementById("needle-minute-right");
 					this.needleHour = document.getElementById("needle-hour-right");
+				} else if (id === "zone-center") {
+					this.light = document.getElementById("light-center");
+					this.needleMinute = document.getElementById("needle-minute-center");
+					this.needleHour = document.getElementById("needle-hour-center");
 				}
 			},
 			tick() {
@@ -175,9 +425,15 @@
 				if (this.data.mode === "slow") {
 					setClockSpeed(0.5); // Ralenti x0.5
 					setSpaceScale(1.5, 2000); // Espace s'étend
+					setBookSpawnSpeed(0.3); // Livres apparaissent lentement
 				} else if (this.data.mode === "fast") {
 					setClockSpeed(2.0); // Accéléré x2
 					setSpaceScale(0.6, 1000); // Espace se contracte
+					setBookSpawnSpeed(4.0); // Livres apparaissent rapidement
+				} else if (this.data.mode === "rewind") {
+					setClockSpeed(0.5); // Son ralenti (effet rewind)
+					setSpaceScale(0.8, 1500); // Légère contraction
+					setBookSpawnSpeed(-2.0); // Livres disparaissent (négatif = rewind)
 				}
 				
 				// Activer la lumière
@@ -194,9 +450,10 @@
 				
 				// Activer l'aiguille des minutes (rotation rapide)
 				if (this.needleMinute) {
+					const rotDir = this.data.mode === "rewind" ? "-360" : "360";
 					this.needleMinute.setAttribute("animation__spin", {
 						property: "rotation",
-						to: "0 360 0",
+						to: "0 " + rotDir + " 0",
 						loop: true,
 						dur: this.data.needleSpeed,
 						easing: "linear"
@@ -205,9 +462,10 @@
 				
 				// Activer l'aiguille des heures (12x plus lente)
 				if (this.needleHour) {
+					const rotDir = this.data.mode === "rewind" ? "-360" : "360";
 					this.needleHour.setAttribute("animation__spin", {
 						property: "rotation",
-						to: "0 360 0",
+						to: "0 " + rotDir + " 0",
 						loop: true,
 						dur: this.data.needleSpeed * 12,
 						easing: "linear"
@@ -222,6 +480,9 @@
 				
 				// Revenir à l'échelle normale de l'espace
 				setSpaceScale(1, 1500);
+				
+				// Revenir à la vitesse normale des livres
+				setBookSpawnSpeed(1.0);
 				
 				// Désactiver la lumière
 				if (this.light) {
@@ -249,7 +510,7 @@
 	<div id="hud">
 		<strong>Interstellar × Rolex</strong><br>
 		Marchez sur un cercle pour modifier le temps.<br>
-		⬅ Gauche : temps ralenti &nbsp; | &nbsp; Droite : temps accéléré ➡
+		⬅ Gauche : rewind | Centre : ralenti | Droite : accéléré ➡
 	</div>
 	<div id="debug">Cliquez pour activer le son</div>
 
@@ -268,80 +529,156 @@
 
 		<!-- Cube 4x4x4 (limites invisibles) -->
 
-		<!-- ========== CERCLE GAUCHE (SLOW) ========== -->
-		<a-entity id="zone-left" position="-1 0.01 0" 
-			time-zone="mode: slow; radius: 0.9; lightSpeed: 9000; needleSpeed: 6000">
+		<!-- ========== CERCLE GAUCHE (REWIND) ========== -->
+		<a-entity id="zone-left" position="-1.8 0.01 0" 
+			time-zone="mode: rewind; radius: 0.55; lightSpeed: 4000; needleSpeed: 2000">
 			
-			<!-- Anneau doré -->
-			<a-ring radius-inner="0.75" radius-outer="0.85" rotation="-90 0 0" 
-				material="color: #d9b066; opacity: 0.9; metalness: 0.6"></a-ring>
-			<a-ring radius-inner="0.40" radius-outer="0.42" rotation="-90 0 0" 
-				material="color: #d9b066; opacity: 0.6"></a-ring>
+			<!-- Anneau violet -->
+			<a-ring radius-inner="0.45" radius-outer="0.52" rotation="-90 0 0" 
+				material="color: #6a5acd; opacity: 0.9; metalness: 0.6"></a-ring>
+			<a-ring radius-inner="0.22" radius-outer="0.24" rotation="-90 0 0" 
+				material="color: #6a5acd; opacity: 0.6"></a-ring>
 			
 			<!-- Aiguille des minutes (longue, rapide) -->
 			<a-entity id="needle-minute-left" position="0 0.03 0" rotation="0 0 0">
-				<a-box width="0.65" height="0.012" depth="0.020" position="0.27 0 0" 
-					material="color: #d9b066; metalness: 0.8"></a-box>
+				<a-box width="0.40" height="0.008" depth="0.012" position="0.17 0 0" 
+					material="color: #6a5acd; metalness: 0.8"></a-box>
 			</a-entity>
 			
 			<!-- Aiguille des heures (courte, lente) -->
 			<a-entity id="needle-hour-left" position="0 0.05 0" rotation="0 90 0">
-				<a-box width="0.45" height="0.018" depth="0.025" position="0.17 0 0" 
-					material="color: #c9a050; metalness: 0.8"></a-box>
+				<a-box width="0.28" height="0.012" depth="0.016" position="0.10 0 0" 
+					material="color: #483d8b; metalness: 0.8"></a-box>
 			</a-entity>
 		</a-entity>
 
 		<!-- Lumière gauche -->
-		<a-entity id="light-left" position="-1 1.5 0">
-			<a-entity position="0.5 0 0">
-				<a-entity light="type: spot; color: #ffd080; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
+		<a-entity id="light-left" position="-1.8 1.2 0">
+			<a-entity position="0.3 0 0">
+				<a-entity light="type: spot; color: #9080ff; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
 					position="0 0 0" rotation="-90 0 0"></a-entity>
-				<a-sphere radius="0.04" material="color: #ffd080; emissive: #ffd080; emissiveIntensity: 0.5"></a-sphere>
+				<a-sphere radius="0.025" material="color: #9080ff; emissive: #9080ff; emissiveIntensity: 0.5"></a-sphere>
 			</a-entity>
 		</a-entity>
 
-		<!-- Pile de livres (modèle 3D) -->
-		<a-entity id="books" position="-1 0 0">
+		<!-- Pile de livres (modèle 3D) sur cercle rewind -->
+		<a-entity id="books" position="-1.8 0 0">
 			<a-gltf-model src="./stack_of_books.glb" shadow="cast: true; receive: true" 
-				scale="0.20 0.20 0.20" position="0 0.15 0"></a-gltf-model>
+				scale="0.15 0.15 0.15" position="0 0.10 0"></a-gltf-model>
 		</a-entity>
 
 		<!-- ========== CERCLE DROIT (FAST) ========== -->
-		<a-entity id="zone-right" position="1 0.01 0" 
-			time-zone="mode: fast; radius: 0.9; lightSpeed: 1500; needleSpeed: 800">
+		<a-entity id="zone-right" position="1.8 0.01 0" 
+			time-zone="mode: fast; radius: 0.55; lightSpeed: 1500; needleSpeed: 800">
 			
 			<!-- Anneau rose -->
-			<a-ring radius-inner="0.75" radius-outer="0.85" rotation="-90 0 0" 
+			<a-ring radius-inner="0.45" radius-outer="0.52" rotation="-90 0 0" 
 				material="color: #e85f8d; opacity: 0.9; metalness: 0.6"></a-ring>
-			<a-ring radius-inner="0.40" radius-outer="0.42" rotation="-90 0 0" 
+			<a-ring radius-inner="0.22" radius-outer="0.24" rotation="-90 0 0" 
 				material="color: #e85f8d; opacity: 0.6"></a-ring>
 			
 			<!-- Aiguille des minutes (longue, rapide) -->
 			<a-entity id="needle-minute-right" position="0 0.03 0" rotation="0 0 0">
-				<a-box width="0.65" height="0.012" depth="0.020" position="0.27 0 0" 
+				<a-box width="0.40" height="0.008" depth="0.012" position="0.17 0 0" 
 					material="color: #e85f8d; metalness: 0.8"></a-box>
 			</a-entity>
 			
 			<!-- Aiguille des heures (courte, lente) -->
 			<a-entity id="needle-hour-right" position="0 0.05 0" rotation="0 90 0">
-				<a-box width="0.45" height="0.018" depth="0.025" position="0.17 0 0" 
+				<a-box width="0.28" height="0.012" depth="0.016" position="0.10 0 0" 
 					material="color: #d04a78; metalness: 0.8"></a-box>
 			</a-entity>
 		</a-entity>
 
 		<!-- Lumière droite -->
-		<a-entity id="light-right" position="1 1.5 0">
-			<a-entity position="0.5 0 0">
+		<a-entity id="light-right" position="1.8 1.2 0">
+			<a-entity position="0.3 0 0">
 				<a-entity light="type: spot; color: #ff80a0; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
 					position="0 0 0" rotation="-90 0 0"></a-entity>
-				<a-sphere radius="0.04" material="color: #ff80a0; emissive: #ff80a0; emissiveIntensity: 0.5"></a-sphere>
+				<a-sphere radius="0.025" material="color: #ff80a0; emissive: #ff80a0; emissiveIntensity: 0.5"></a-sphere>
 			</a-entity>
 		</a-entity>
 
 		<!-- Casque astronaute (modèle 3D) -->
-		<a-entity id="helmet" position="1 0 0">
+		<a-entity id="helmet" position="1.8 0 0">
 			<a-gltf-model src="./astronaut_helmet.glb" shadow="cast: true; receive: true" 
 				scale="0.018 0.018 0.018" position="0 0.0 0" rotation="-15 0 0"></a-gltf-model>
+		</a-entity>
+
+		<!-- ========== ÉTAGÈRE AVEC LIVRES ========== -->
+		<a-entity id="bookshelf" position="0 0 -2.5" bookshelf-spawner="baseInterval: 2000; maxBooks: 24; buildDelay: 300">
+			<!-- Structure de l'étagère (6 étages) -->
+			<!-- Panneau arrière -->
+			<a-box width="1.4" height="2.2" depth="0.03" position="0 1.1 -0.1"
+				material="color: #3d2817; roughness: 0.9"></a-box>
+			
+			<!-- Étagère 1 (sol) -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 0.02 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Étagère 2 -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 0.37 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Étagère 3 -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 0.72 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Étagère 4 -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 1.07 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Étagère 5 -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 1.42 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Étagère 6 -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 1.77 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Toit de l'étagère -->
+			<a-box width="1.4" height="0.04" depth="0.25" position="0 2.12 0"
+				material="color: #5c3a21; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Côté gauche -->
+			<a-box width="0.04" height="2.2" depth="0.25" position="-0.7 1.1 0"
+				material="color: #4a2c17; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+			
+			<!-- Côté droit -->
+			<a-box width="0.04" height="2.2" depth="0.25" position="0.7 1.1 0"
+				material="color: #4a2c17; roughness: 0.7" shadow="cast: true; receive: true"></a-box>
+		</a-entity>
+
+		<!-- ========== CERCLE CENTRAL (SLOW) ========== -->
+		<a-entity id="zone-center" position="0 0.01 0" 
+			time-zone="mode: slow; radius: 0.55; lightSpeed: 9000; needleSpeed: 6000">
+			
+			<!-- Anneau doré -->
+			<a-ring radius-inner="0.45" radius-outer="0.52" rotation="-90 0 0" 
+				material="color: #d9b066; opacity: 0.9; metalness: 0.6"></a-ring>
+			<a-ring radius-inner="0.22" radius-outer="0.24" rotation="-90 0 0" 
+				material="color: #d9b066; opacity: 0.6"></a-ring>
+			
+			<!-- Aiguille des minutes (longue, rapide) -->
+			<a-entity id="needle-minute-center" position="0 0.03 0" rotation="0 0 0">
+				<a-box width="0.40" height="0.008" depth="0.012" position="0.17 0 0" 
+					material="color: #d9b066; metalness: 0.8"></a-box>
+			</a-entity>
+			
+			<!-- Aiguille des heures (courte, lente) -->
+			<a-entity id="needle-hour-center" position="0 0.05 0" rotation="0 90 0">
+				<a-box width="0.28" height="0.012" depth="0.016" position="0.10 0 0" 
+					material="color: #c9a050; metalness: 0.8"></a-box>
+			</a-entity>
+		</a-entity>
+
+		<!-- Lumière centrale -->
+		<a-entity id="light-center" position="0 1.2 0">
+			<a-entity position="0.3 0 0">
+				<a-entity light="type: spot; color: #ffd080; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
+					position="0 0 0" rotation="-90 0 0"></a-entity>
+				<a-sphere radius="0.025" material="color: #ffd080; emissive: #ffd080; emissiveIntensity: 0.5"></a-sphere>
+			</a-entity>
 		</a-entity>
 
 		<!-- Caméra avec limites -->
