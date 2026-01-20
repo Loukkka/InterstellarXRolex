@@ -54,8 +54,6 @@
 		});
 		
 		// === AUDIO MANAGER: Contrôle la vitesse du son ===
-		let allBookshelves = []; // Liste de toutes les bibliothèques dans la scène
-		
 		function setClockSpeed(speed) {
 			if (clockAudio) {
 				clockAudio.playbackRate = speed;
@@ -97,84 +95,14 @@
 		
 		function setBookSpawnSpeed(speed) {
 			bookSpawnSpeed = speed;
-			// Appliquer à toutes les bibliothèques
-			allBookshelves.forEach(shelf => {
-				if (shelf.components && shelf.components['bookshelf-spawner']) {
-					// La vitesse est appliquée globalement via bookSpawnSpeed
-				}
-			});
 		}
-
-		// === BOOKSHELF MANAGER: Gère la duplication et l'empilement des bibliothèques ===
-		AFRAME.registerComponent("bookshelf-manager", {
-			schema: {
-				maxStacks: { type: "number", default: 10 }, // Maximum d'étages verticaux
-				radius: { type: "number", default: 3.5 } // Rayon du cercle autour du cube
-			},
-			init() {
-				this.bookcases = []; // Toutes les bibliothèques créées
-				this.mainBookcase = this.el; // La première bibliothèque
-				
-				// Ajouter la bibliothèque principale à la liste globale
-				allBookshelves.push(this.el);
-				
-				this.createMultipleCases();
-			},
-			createMultipleCases() {
-				const positions = [];
-				const numAround = 8; // Nombre de bibliothèques autour du cube
-				
-				// Créer des positions autour du cube
-				for (let i = 0; i < numAround; i++) {
-					const angle = (i / numAround) * Math.PI * 2;
-					const x = Math.cos(angle) * this.data.radius;
-					const z = Math.sin(angle) * this.data.radius;
-					
-					// Pour chaque position horizontale, créer jusqu'à maxStacks verticalement
-					for (let y = 0; y < this.data.maxStacks; y++) {
-						positions.push({
-							x: x,
-							y: y * 3, // Espacement vertical de 3 unités
-							z: z,
-							rotation: -Math.atan2(z, x) * (180 / Math.PI) + 90 // Rotation pour faire face au centre
-						});
-					}
-				}
-				
-				// Créer les bibliothèques aux positions calculées
-				positions.forEach((pos, index) => {
-					const bookcase = document.createElement("a-entity");
-					bookcase.setAttribute("class", "bookcase-instance");
-					bookcase.setAttribute("position", `${pos.x} ${pos.y} ${pos.z}`);
-					bookcase.setAttribute("rotation", `0 ${pos.rotation} 0`);
-					bookcase.setAttribute("bookshelf-spawner", "baseInterval: 2000; maxBooks: 24; linkedToCircles: true");
-					
-					// Modèle 3D
-					const model = document.createElement("a-gltf-model");
-					model.setAttribute("src", "./bookcase.glb");
-					model.setAttribute("shadow", "cast: true; receive: true");
-					model.setAttribute("scale", "1 1 1");
-					model.setAttribute("position", "-0.3 0 0.6");
-					
-					bookcase.appendChild(model);
-					this.el.sceneEl.appendChild(bookcase);
-					this.bookcases.push(bookcase);
-					
-					// Ajouter à la liste globale
-					allBookshelves.push(bookcase);
-				});
-				
-				console.log(`Created ${positions.length} bookcases (${numAround} around × ${this.data.maxStacks} high)`);
-			}
-		});
 
 		// === BOOKSHELF SPAWNER: Fait apparaître les livres progressivement ===
 		AFRAME.registerComponent("bookshelf-spawner", {
 			schema: {
 				baseInterval: { type: "number", default: 3000 }, // Intervalle de base en ms
 				maxBooks: { type: "number", default: 24 },
-				buildDelay: { type: "number", default: 500 }, // Délai entre chaque planche
-				linkedToCircles: { type: "boolean", default: true } // Si contrôlé par les cercles
+				buildDelay: { type: "number", default: 500 } // Délai entre chaque planche
 			},
 			
 			// Génère des positions Z aléatoires pour chaque étage (3-6 livres par étage)
@@ -317,9 +245,6 @@ document.addEventListener("click", startSpawning);
 				});
 			},
 			tick(time) {
-				// Vérifier si cette bibliothèque est contrôlée par les cercles
-				if (!this.schema.linkedToCircles.default && !this.started) return;
-				
 				if (!this.started || !this.shelfBuilt) return;
 				
 				// Mode rewind : faire disparaître les livres
@@ -780,9 +705,7 @@ document.addEventListener("click", startSpawning);
 		</a-entity>
 
 		<!-- ========== BOOKCASE (MODÈLE 3D) ========== -->
-		<a-entity id="bookcase" position="-0.5 0 -2.5" rotation="0 -90 0" 
-			bookshelf-spawner="baseInterval: 2000; maxBooks: 24; linkedToCircles: true"
-			bookshelf-manager="maxStacks: 10; radius: 3.5">
+		<a-entity id="bookcase" position="-0.5 0 -2.5" rotation="0 -90 0" bookshelf-spawner="baseInterval: 2000; maxBooks: 12">
 			<a-gltf-model src="./bookcase.glb" 
 				shadow="cast: true; receive: true"
 				scale="1 1 1" 
