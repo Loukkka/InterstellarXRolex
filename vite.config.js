@@ -8,6 +8,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets'
-  }
+    assetsDir: 'assets',
+    // S'assurer que tous les assets sont copiés
+    rollupOptions: {
+      output: {
+        assetFileNames: (assetInfo) => {
+          // Garder les fichiers .glb, .jpg, .mp3, etc. dans le dossier assets
+          return 'assets/[name]-[hash][extname]'
+        }
+      }
+    }
+  },
+  // Inclure explicitement les fichiers dans public
+  publicDir: 'public'
 })
