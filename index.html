@@ -64,9 +64,297 @@
 
 		// === BOOKSHELF: Contrôle la vitesse d'apparition des livres ===
 		let bookSpawnSpeed = 1.0; // Multiplicateur de vitesse (0.5 = lent, 2 = rapide)
+		let isInsideBookcase = false; // État: sommes-nous dans la bibliothèque?
+		let bookshelfSpawnerRef = null; // Référence au spawner
 		
 		function setBookSpawnSpeed(speed) {
 			bookSpawnSpeed = speed;
+		}
+		
+		// === TESSERACT MODE: Quand on clique sur le livre tombé ===
+		function enterTesseract() {
+			if (isInsideBookcase) return;
+			isInsideBookcase = true;
+			
+			console.log("=== ENTRÉE DANS LE TESSERACT ===");
+			
+			// Effet de rewind visuel
+			playRewindEffect();
+			
+			// Après l'effet rewind, téléporter le joueur
+			setTimeout(function() {
+				teleportInsideBookcase();
+			}, 2000);
+		}
+		
+		function playRewindEffect() {
+			// Faire tourner les aiguilles à l'envers très vite
+			var needles = ["needle-minute-left", "needle-minute-right", "needle-minute-center",
+						   "needle-hour-left", "needle-hour-right", "needle-hour-center"];
+			
+			needles.forEach(function(id) {
+				var needle = document.getElementById(id);
+				if (needle) {
+					needle.setAttribute("animation__rewind", {
+						property: "rotation",
+						to: "0 720 0",
+						dur: 1500,
+						easing: "easeInOutQuad"
+					});
+				}
+			});
+			
+			// Contracter l'espace
+			setSpaceScale(0.3, 1500);
+			
+			// Son de rewind
+			playRewindSound();
+			
+			// Flash lumineux
+			var flash = document.createElement("a-plane");
+			flash.setAttribute("position", "0 1.6 -0.5");
+			flash.setAttribute("width", "10");
+			flash.setAttribute("height", "10");
+			flash.setAttribute("material", "color: white; opacity: 0; transparent: true; shader: flat");
+			document.querySelector("a-scene").appendChild(flash);
+			
+			flash.setAttribute("animation__flash", {
+				property: "material.opacity",
+				from: 0,
+				to: 1,
+				dur: 500,
+				easing: "easeInQuad"
+			});
+			
+			setTimeout(function() {
+				flash.setAttribute("animation__fadeout", {
+					property: "material.opacity",
+					to: 0,
+					dur: 1000,
+					easing: "easeOutQuad"
+				});
+				setTimeout(function() {
+					if (flash.parentNode) flash.parentNode.removeChild(flash);
+				}, 1100);
+			}, 600);
+		}
+		
+		function playRewindSound() {
+			try {
+				var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+				var oscillator = audioCtx.createOscillator();
+				var gainNode = audioCtx.createGain();
+				
+				oscillator.connect(gainNode);
+				gainNode.connect(audioCtx.destination);
+				
+				// Son montant (effet rewind)
+				oscillator.frequency.setValueAtTime(100, audioCtx.currentTime);
+				oscillator.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 1.5);
+				oscillator.type = 'sawtooth';
+				
+				gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+				gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+				
+				oscillator.start(audioCtx.currentTime);
+				oscillator.stop(audioCtx.currentTime + 1.5);
+			} catch(e) {
+				console.log("Erreur audio rewind:", e);
+			}
+		}
+		
+		function playShrinkSound() {
+			try {
+				var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+				
+				// Son descendant (effet de rétrécissement/aspiration)
+				var osc1 = audioCtx.createOscillator();
+				var gain1 = audioCtx.createGain();
+				osc1.connect(gain1);
+				gain1.connect(audioCtx.destination);
+				
+				// Fréquence qui descend rapidement
+				osc1.frequency.setValueAtTime(600, audioCtx.currentTime);
+				osc1.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+				osc1.type = 'sine';
+				
+				gain1.gain.setValueAtTime(0.3, audioCtx.currentTime);
+				gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+				
+				osc1.start(audioCtx.currentTime);
+				osc1.stop(audioCtx.currentTime + 0.6);
+				
+				// Deuxième oscillateur pour effet de "whoosh"
+				var osc2 = audioCtx.createOscillator();
+				var gain2 = audioCtx.createGain();
+				osc2.connect(gain2);
+				gain2.connect(audioCtx.destination);
+				
+				osc2.frequency.setValueAtTime(400, audioCtx.currentTime);
+				osc2.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
+				osc2.type = 'triangle';
+				
+				gain2.gain.setValueAtTime(0.2, audioCtx.currentTime);
+				gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+				
+				osc2.start(audioCtx.currentTime);
+				osc2.stop(audioCtx.currentTime + 0.5);
+				
+			} catch(e) {
+				console.log("Erreur audio shrink:", e);
+			}
+		}
+		
+		function teleportInsideBookcase() {
+			var rig = document.getElementById("rig");
+			var camera = document.querySelector("a-camera");
+			
+			// Désactiver les limites normales
+			rig.removeAttribute("boundary-limit");
+			
+			// Créer un effet de tunnel/projection visuel amélioré
+			const projectionOverlay = document.createElement("a-plane");
+			projectionOverlay.setAttribute("id", "projection-tunnel");
+			projectionOverlay.setAttribute("width", "10");
+			projectionOverlay.setAttribute("height", "10");
+			projectionOverlay.setAttribute("position", "0 0 -0.5");
+			projectionOverlay.setAttribute("material", "shader: flat; color: #0a0a1f; opacity: 0; transparent: true");
+			camera.appendChild(projectionOverlay);
+			
+			// Créer un effet de vortex/tunnel (sans mouvement de caméra)
+			for (var i = 0; i < 8; i++) {
+				var ring = document.createElement("a-ring");
+				ring.setAttribute("radius-inner", (0.2 + i * 0.3));
+				ring.setAttribute("radius-outer", (0.25 + i * 0.3));
+				ring.setAttribute("position", "0 0 " + (-0.3 - i * 0.08));
+				ring.setAttribute("material", "shader: flat; color: #00ffff; opacity: 0.7; transparent: true");
+				ring.setAttribute("class", "tunnel-ring");
+				
+				// Animation de zoom vers l'intérieur (attraction)
+				ring.setAttribute("animation__zoom", {
+					property: "scale",
+					from: "8 8 1",
+					to: "0.05 0.05 1",
+					dur: 1000 + i * 50,
+					easing: "easeInCubic"
+				});
+				
+				// Animation de fondu
+				ring.setAttribute("animation__fade", {
+					property: "material.opacity",
+					from: 0.9,
+					to: 0,
+					dur: 1000 + i * 50,
+					easing: "easeInQuad"
+				});
+				
+				// Animation de rotation pour effet vortex
+				ring.setAttribute("animation__rotate", {
+					property: "rotation",
+					from: "0 0 0",
+					to: "0 0 " + (i % 2 === 0 ? 360 : -360),
+					dur: 1200,
+					easing: "easeInOutQuad"
+				});
+				
+				camera.appendChild(ring);
+			}
+			
+			// Jouer son de rétrécissement dès le début
+			playShrinkSound();
+			
+			// PHASE 1: Rétrécir progressivement AVANT de téléporter
+			rig.setAttribute("animation__shrink", {
+				property: "scale",
+				from: "1 1 1",
+				to: "0.05 0.05 0.05",
+				dur: 1000,
+				easing: "easeInCubic"
+			});
+			
+			// Animation de l'effet tunnel (fondu progressif pendant le rétrécissement)
+			projectionOverlay.setAttribute("animation__fade", {
+				property: "material.opacity",
+				from: 0,
+				to: 1,
+				dur: 900,
+				easing: "easeInQuad"
+			});
+			
+			// PHASE 2: Une fois petit, téléporter instantanément
+			setTimeout(function() {
+				// Téléportation instantanée maintenant qu'on est tout petit
+				rig.object3D.position.set(-0.3, 2.1, -2.4);
+				console.log("Téléportation effectuée");
+			}, 1000);
+			
+			// Fade out après téléportation
+			setTimeout(function() {
+				projectionOverlay.setAttribute("animation__fadeout", {
+					property: "material.opacity",
+					from: 1,
+					to: 0,
+					dur: 400,
+					easing: "easeOutQuad"
+				});
+			}, 1100);
+			
+			// Remettre l'espace à la normale
+			setTimeout(function() {
+				setSpaceScale(1, 1000);
+				
+				// Retirer l'effet tunnel et les anneaux (avec vérification)
+				const tunnel = document.getElementById("projection-tunnel");
+				if (tunnel && tunnel.parentNode) {
+					tunnel.parentNode.removeChild(tunnel);
+				}
+				var rings = document.querySelectorAll(".tunnel-ring");
+				rings.forEach(function(ring) { 
+					if (ring && ring.parentNode) {
+						ring.parentNode.removeChild(ring); 
+					}
+				});
+				
+				// Réactiver les limites adaptées au mode miniature
+				var rig = document.getElementById("rig");
+				rig.setAttribute("boundary-limit", "adaptToScale: true");
+				
+				// Rendre les livres cliquables pour les faire tomber
+				if (bookshelfSpawnerRef) {
+					bookshelfSpawnerRef.makeBooksClickable();
+				}
+				
+				console.log("Vous êtes maintenant DANS la bibliothèque!");
+				console.log("Cliquez sur un livre pour le faire tomber...");
+			}, 1200);
+		}
+		
+		function exitTesseract() {
+			if (!isInsideBookcase) return;
+			isInsideBookcase = false;
+			
+			var rig = document.getElementById("rig");
+			
+			// Remettre le joueur à taille normale
+			rig.setAttribute("animation__grow", {
+				property: "scale",
+				to: "1 1 1",
+				dur: 1000,
+				easing: "easeInOutQuad"
+			});
+			
+			// Téléporter hors de la bibliothèque
+			rig.setAttribute("animation__teleportout", {
+				property: "position",
+				to: "0 0 1.5",
+				dur: 1000,
+				easing: "easeInOutQuad"
+			});
+			
+			// Réactiver les limites
+			setTimeout(function() {
+				rig.setAttribute("boundary-limit", "");
+			}, 1100);
 		}
 
 		// === BOOKSHELF SPAWNER: Fait apparaître les livres progressivement ===
@@ -147,6 +435,17 @@
 				this.bookHasFallen = false;
 				this.fallScheduled = false;
 				
+				// Tracking pour push progressif (3 clics)
+				this.bookPushCounts = [];
+				
+				// Positions des livres déjà tombés (pour éviter superposition)
+				this.fallenPositions = [];
+				
+				// Coordonnées communes pour la chute
+				this.fallTargetX = 1;
+				this.fallTargetY = 0.08;
+				this.fallTargetZ = 0;
+				
 				// Génère des positions aléatoires pour les livres sur chaque étage
 				this.bookPositions = this.generateRandomBookPositions();
 				
@@ -165,6 +464,7 @@
 				
 				// Référence pour setTimeout
 				const component = this;
+				bookshelfSpawnerRef = this; // Référence globale
 				
 				// Démarrer après un clic
 				const startSpawning = function() {
@@ -303,10 +603,13 @@
 				
 				console.log("Livre", idx, "tombe de", pos.x, pos.y, pos.z);
 				
-				// Nouvelle position au sol (devant le joueur - position z positive)
-				var newY = 0.08;
-				var newZ = 0; // Devant le joueur (position centrale)
-				var newX = 1 + (Math.random() * 0.3 - 0.15); // Légèrement à gauche ou à droite
+				// Récupérer dimensions du livre (hauteur = 0.25)
+				var bookHeight = 0.25;
+				
+				// Position de chute commune avec offset selon dimensions
+				var newX = this.fallTargetX;
+				var newY = this.fallTargetY + (bookHeight / 2);
+				var newZ = this.fallTargetZ;
 				
 				// Jouer le son de chute
 				this.playBookFallSound();
@@ -327,7 +630,182 @@
 				});
 				
 				this.bookHasFallen = true;
+				
+				// Rendre le livre cliquable après qu'il soit tombé
+				var component = this;
+				setTimeout(function() {
+					// Ajouter une zone de clic invisible plus grande
+					var clickZone = document.createElement("a-box");
+					clickZone.setAttribute("width", "0.5");
+					clickZone.setAttribute("height", "0.4");
+					clickZone.setAttribute("depth", "0.3");
+					clickZone.setAttribute("position", "0 0 0");
+					clickZone.setAttribute("material", "opacity: 0; transparent: true");
+					clickZone.setAttribute("class", "clickable-fallen-book");
+					clickZone.setAttribute("fallen-book-click", "");
+					book.appendChild(clickZone);
+					
+					// Point lumineux blanc au-dessus du livre (livre couché)
+					var glowSphere = document.createElement("a-sphere");
+					glowSphere.setAttribute("radius", "0.04");
+					glowSphere.setAttribute("position", "0.4 0 0");
+					glowSphere.setAttribute("material", "shader: flat; color: #ffffff; opacity: 0.5; transparent: true");
+					glowSphere.setAttribute("animation__pulse", {
+						property: "scale",
+						from: "0.8 0.8 0.8",
+						to: "1.3 1.3 1.3",
+						dur: 600,
+						dir: "alternate",
+						loop: true,
+						easing: "easeInOutSine"
+					});
+					book.appendChild(glowSphere);
+					
+					// Lumière point blanche qui éclaire le livre
+					var glowLight = document.createElement("a-light");
+					glowLight.setAttribute("type", "point");
+					glowLight.setAttribute("color", "#ffffff");
+					glowLight.setAttribute("intensity", "1.5");
+					glowLight.setAttribute("distance", "5");
+					glowLight.setAttribute("decay", "1");
+					glowLight.setAttribute("position", "0 0.20 0");
+					glowLight.setAttribute("animation__blink", {
+						property: "intensity",
+						from: 0.8,
+						to: 2.5,
+						dur: 600,
+						dir: "alternate",
+						loop: true,
+						easing: "easeInOutSine"
+					});
+					book.appendChild(glowLight);
+					
+					console.log("Livre tombé maintenant cliquable!");
+				}, 2100);
+				
 				console.log("Animation de chute lancée!");
+			},
+			
+			// Rendre tous les livres cliquables (mode tesseract)
+			makeBooksClickable: function() {
+				var comp = this;
+				// Initialiser compteurs de push
+				this.bookPushCounts = new Array(this.books.length).fill(0);
+				
+				// Configurer le raycaster pour détecter les livres à petite échelle
+				var cursor = document.querySelector("a-cursor");
+				if (cursor) {
+					cursor.setAttribute("raycaster", "objects: .clickable-fallen-book, .pushable-book; far: 1000");
+				}
+				
+				console.log("Configuration raycaster pour " + this.books.length + " livres");
+				
+				this.books.forEach(function(book, index) {
+					// Ajouter une zone de clic précise sur chaque livre
+					var clickZone = document.createElement("a-box");
+					clickZone.setAttribute("width", "0.12");
+					clickZone.setAttribute("height", "0.28");
+					clickZone.setAttribute("depth", "0.20");
+					clickZone.setAttribute("position", "0 0 0");
+					clickZone.setAttribute("material", "opacity: 0; transparent: true; side: double");
+					clickZone.setAttribute("class", "pushable-book");
+					clickZone.setAttribute("pushable-book", "index: " + index);
+					book.appendChild(clickZone);
+					console.log("Zone clic ajoutée au livre " + index);
+				});
+				console.log("Livres rendus poussables!");
+			},
+			
+			// Faire tomber un livre spécifique (poussé par le joueur)
+			pushBookByIndex: function(index) {
+				if (index < 0 || index >= this.books.length) return;
+				
+				// Pousser directement le livre cliqué (celui dans le viseur)
+				var book = this.books[index];
+				var pos = book.object3D.position;
+				
+				// Incrémenter compteur de push
+				this.bookPushCounts[index]++;
+				var pushCount = this.bookPushCounts[index];
+				
+				console.log("=== PUSH " + pushCount + "/3 sur livre " + index + " ===");
+				
+				if (pushCount < 3) {
+					// Push progressif - déplacer légèrement vers l'avant (vers le joueur = +X)
+					var pushDistance = 0.08;
+					var newX = pos.x + pushDistance;
+					
+					book.setAttribute("animation__push" + pushCount, {
+						property: "position",
+						to: newX + " " + pos.y + " " + pos.z,
+						dur: 300,
+						easing: "easeOutQuad"
+					});
+					
+					// Petit son de poussée
+					var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+					var osc = audioCtx.createOscillator();
+					var gain = audioCtx.createGain();
+					osc.connect(gain);
+					gain.connect(audioCtx.destination);
+					osc.frequency.value = 200;
+					gain.gain.value = 0.1;
+					osc.start();
+					osc.stop(audioCtx.currentTime + 0.05);
+				} else {
+					// 3ème push - le livre tombe!
+					console.log("📖 LIVRE TOMBE!");
+					
+					// Son de chute
+					this.playBookFallSound();
+					
+					// Récupérer dimensions
+					var bookHeight = 0.25;
+					
+					// Trouver une position de chute unique (sans superposition)
+					var newX, newZ;
+					var attempts = 0;
+					var minDistance = 0.35; // Distance minimum entre les livres
+					var comp = this;
+					
+					do {
+						newX = this.fallTargetX + (Math.random() - 0.5) * 1.5;
+						newZ = this.fallTargetZ + (Math.random() - 0.5) * 1.5;
+						attempts++;
+						
+						// Vérifier distance avec les livres déjà tombés
+						var tooClose = this.fallenPositions.some(function(p) {
+							var dx = newX - p.x;
+							var dz = newZ - p.z;
+							return Math.sqrt(dx*dx + dz*dz) < minDistance;
+						});
+					} while (tooClose && attempts < 20);
+					
+					// Enregistrer cette position
+					this.fallenPositions.push({x: newX, z: newZ});
+					
+					var newY = this.fallTargetY + (bookHeight / 2);
+					
+					book.setAttribute("animation__pushed", {
+						property: "position",
+						to: newX + " " + newY + " " + newZ,
+						dur: 1500,
+						easing: "easeOutElastic"
+					});
+					
+					book.setAttribute("animation__pushedrotate", {
+						property: "rotation",
+						to: "0 -90 90",
+						dur: 1200,
+						easing: "easeOutQuad"
+					});
+					
+					// Après la chute, proposer de sortir
+					setTimeout(function() {
+						console.log("Vous venez de faire tomber le livre que vous avez ramassé!");
+						console.log("Appuyez sur Échap pour revenir...");
+					}, 2000);
+				}
 			},
 			
 			// Jouer un son de chute de livre
@@ -530,13 +1008,129 @@
 			}
 		});
 
+		// === FALLEN BOOK CLICK: Composant pour cliquer sur le livre tombé ===
+		AFRAME.registerComponent("fallen-book-click", {
+			init: function() {
+				var el = this.el;
+				
+				// Ajouter un glow pour montrer que c'est cliquable
+				el.setAttribute("animation__glow", {
+					property: "scale",
+					from: "1 1 1",
+					to: "1.05 1.05 1.05",
+					dur: 800,
+					dir: "alternate",
+					loop: true,
+					easing: "easeInOutSine"
+				});
+				
+				el.addEventListener("click", function() {
+					console.log("Livre tombé cliqué!");
+					enterTesseract();
+				});
+				
+				el.addEventListener("mouseenter", function() {
+					el.setAttribute("animation__highlight", {
+						property: "scale",
+						to: "1.1 1.1 1.1",
+						dur: 200,
+						easing: "easeOutQuad"
+					});
+				});
+				
+				el.addEventListener("mouseleave", function() {
+					el.removeAttribute("animation__highlight");
+				});
+			}
+		});
+		
+		// === PUSHABLE BOOK: Composant pour pousser les livres depuis le tesseract ===
+		AFRAME.registerComponent("pushable-book", {
+			schema: {
+				index: { type: "int", default: 0 }
+			},
+			init: function() {
+				var el = this.el;
+				var index = this.data.index;
+				
+				el.addEventListener("click", function(evt) {
+					console.log("=== CLICK détecté sur livre " + index + " ===");
+					
+					// Vérifier que c'est bien le livre le plus proche du raycaster
+					var camera = document.querySelector("a-camera");
+					var cursor = document.querySelector("a-cursor");
+					if (cursor && cursor.components.raycaster) {
+						var intersections = cursor.components.raycaster.intersections;
+						
+						if (intersections.length > 0) {
+							// Trouver le livre le plus proche
+							var closestBookIndex = -1;
+							var closestDistance = Infinity;
+							
+							for (var i = 0; i < intersections.length; i++) {
+								var obj = intersections[i].object.el;
+								if (obj && obj.classList.contains("pushable-book") && obj.components["pushable-book"]) {
+									var bookIdx = obj.components["pushable-book"].data.index;
+									if (intersections[i].distance < closestDistance) {
+										closestDistance = intersections[i].distance;
+										closestBookIndex = bookIdx;
+									}
+								}
+							}
+							
+							// Si ce n'est pas le livre le plus proche, ignorer le clic
+							if (closestBookIndex !== index) {
+								console.log("Clic ignoré - livre " + closestBookIndex + " plus proche que " + index);
+								return;
+							}
+						}
+					}
+					
+					if (bookshelfSpawnerRef) {
+						console.log("bookshelfSpawnerRef trouvé, appel pushBookByIndex pour livre " + index);
+						bookshelfSpawnerRef.pushBookByIndex(index);
+					} else {
+						console.log("ERREUR: bookshelfSpawnerRef est null!");
+					}
+				});
+				
+				el.addEventListener("mouseenter", function() {
+					el.setAttribute("animation__pushhover", {
+						property: "scale",
+						to: "1.1 1.1 1.1",
+						dur: 150,
+						easing: "easeOutQuad"
+					});
+				});
+				
+				el.addEventListener("mouseleave", function() {
+					el.setAttribute("animation__pushleave", {
+						property: "scale",
+						to: "1 1 1",
+						dur: 150,
+						easing: "easeOutQuad"
+					});
+				});
+			}
+		});
+		
+		// === TOUCHE ÉCHAP pour sortir du tesseract ===
+		document.addEventListener("keydown", function(e) {
+			if (e.key === "Escape" && isInsideBookcase) {
+				exitTesseract();
+			}
+		});
+
 		// === BOUNDARY: Bloque l'utilisateur dans le cube 4x4x4 ===
 		AFRAME.registerComponent("boundary-limit", {
 			schema: {
 				minX: { type: "number", default: -2 },
 				maxX: { type: "number", default: 2 },
 				minZ: { type: "number", default: -2 },
-				maxZ: { type: "number", default: 2 }
+				maxZ: { type: "number", default: 2 },
+				minY: { type: "number", default: 0 },
+				maxY: { type: "number", default: 4 },
+				adaptToScale: { type: "boolean", default: true }
 			},
 			init() {
 				this.camPos = new THREE.Vector3();
@@ -551,20 +1145,42 @@
 				const d = this.data;
 				let needsClamp = false;
 				let clampedX = this.camPos.x;
+				let clampedY = this.camPos.y;
 				let clampedZ = this.camPos.z;
 				
+				// Si mode miniature, adapter les limites
+				let minX = d.minX, maxX = d.maxX, minZ = d.minZ, maxZ = d.maxZ;
+				let minY = d.minY, maxY = d.maxY;
+				
+				if (d.adaptToScale && isInsideBookcase) {
+					// Limites adaptées pour scale 0.05 - zone réduite pour éviter le vide
+					const halfSize = 0.12; // Zone plus petite pour rester dans l'armoire
+					const basePos = {x: -0.3, y: 2.1, z: -2.5};
+					minX = basePos.x - halfSize;
+					maxX = basePos.x + halfSize;
+					minY = basePos.y - halfSize;
+					maxY = basePos.y + halfSize;
+					minZ = basePos.z - halfSize;
+					maxZ = basePos.z + halfSize;
+				}
+				
 				// Vérifier limites X
-				if (this.camPos.x < d.minX) { clampedX = d.minX; needsClamp = true; }
-				if (this.camPos.x > d.maxX) { clampedX = d.maxX; needsClamp = true; }
+				if (this.camPos.x < minX) { clampedX = minX; needsClamp = true; }
+				if (this.camPos.x > maxX) { clampedX = maxX; needsClamp = true; }
+				
+				// Vérifier limites Y
+				if (this.camPos.y < minY) { clampedY = minY; needsClamp = true; }
+				if (this.camPos.y > maxY) { clampedY = maxY; needsClamp = true; }
 				
 				// Vérifier limites Z
-				if (this.camPos.z < d.minZ) { clampedZ = d.minZ; needsClamp = true; }
-				if (this.camPos.z > d.maxZ) { clampedZ = d.maxZ; needsClamp = true; }
+				if (this.camPos.z < minZ) { clampedZ = minZ; needsClamp = true; }
+				if (this.camPos.z > maxZ) { clampedZ = maxZ; needsClamp = true; }
 				
 				// Si hors limites, repositionner le rig
 				if (needsClamp) {
 					const rigPos = this.el.object3D.position;
 					rigPos.x += (clampedX - this.camPos.x);
+					rigPos.y += (clampedY - this.camPos.y);
 					rigPos.z += (clampedZ - this.camPos.z);
 				}
 			}
@@ -842,7 +1458,7 @@
 		</a-entity>
 
 		<!-- ========== BOOKCASE (MODÈLE 3D) ========== -->
-		<a-entity id="bookcase" position="-0.5 0 -2.5" rotation="0 -90 0" bookshelf-spawner="baseInterval: 2000; maxBooks: 12">
+		<a-entity id="bookcase" position="-0.5 0 -2.5" rotation="0 -90 0" bookshelf-spawner="baseInterval: 2000; maxBooks: 12" static-body="shape: box; offset: -0.3 1.2 0.6; halfExtents: 1.2 1.2 0.3">
 			<a-gltf-model src="./bookcase.glb" 
 				shadow="cast: true; receive: true"
 				scale="1 1 1" 
@@ -882,7 +1498,7 @@
 		<!-- Caméra avec limites -->
 		<a-entity id="rig" position="0 0 1.5" boundary-limit>
 			<a-camera wasd-controls="acceleration: 8" look-controls position="0 1.8 0">
-				<a-cursor color="#d9b066" fuse="false" raycaster="objects: none"></a-cursor>
+				<a-cursor color="#d9b066" fuse="false" raycaster="objects: .clickable-fallen-book, .pushable-book"></a-cursor>
 			</a-camera>
 		</a-entity>
 	</a-scene>
