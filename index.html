@@ -140,11 +140,15 @@
 				this.shelfBuilt = false;
 				this.buildIndex = 0;
 				
+				// État du livre tombé
+				this.fallenBook = null;
+				this.fallenBookIndex = -1;
+				this.fallenBookOriginalPos = null;
+				this.bookHasFallen = false;
+				this.fallScheduled = false;
+				
 				// Génère des positions aléatoires pour les livres sur chaque étage
 				this.bookPositions = this.generateRandomBookPositions();
-
-
-
 				
 				// Couleurs des livres (24 couleurs)
 				this.bookColors = [
@@ -159,21 +163,22 @@
 				// Éléments de l'étagère à construire
 				this.shelfParts = [];
 				
+				// Référence pour setTimeout
+				const component = this;
+				
 				// Démarrer après un clic
-const startSpawning = () => {
-    // Délai de 5 secondes avant de commencer à faire apparaître les livres
-    setTimeout(() => {
-        this.started = true;
-        this.lastSpawnTime = performance.now();
-        this.buildShelf();
-        console.log("Les livres commencent à apparaître !");
-    }, 5000); // 5000 ms = 5 secondes
-    
-    document.removeEventListener("click", startSpawning);
-};
-document.addEventListener("click", startSpawning);
-
-
+				const startSpawning = function() {
+					// Délai de 5 secondes avant de commencer à faire apparaître les livres
+					setTimeout(function() {
+						component.started = true;
+						component.lastSpawnTime = performance.now();
+						component.buildShelf();
+						console.log("Les livres commencent à apparaître !");
+					}, 5000);
+					
+					document.removeEventListener("click", startSpawning);
+				};
+				document.addEventListener("click", startSpawning);
 			},
 					buildShelf() {
 				// L'étagère GLB est déjà construite, on peut commencer à spawner les livres
@@ -216,11 +221,17 @@ document.addEventListener("click", startSpawning);
 					easing: "easeInBack"
 				});
 			},
-			tick(time) {
+						tick(time) {
 				if (!this.started || !this.shelfBuilt) return;
 				
 				// Mode rewind : faire disparaître les livres
 				if (bookSpawnSpeed < 0) {
+					// Si un livre est tombé, le remettre en place d'abord
+					if (this.bookHasFallen && this.fallenBook) {
+						this.unFallBook();
+					}
+					this.fallScheduled = false;
+					
 					const adjustedInterval = this.data.baseInterval / Math.abs(bookSpawnSpeed);
 					
 					if (time - this.lastSpawnTime > adjustedInterval) {
@@ -232,16 +243,167 @@ document.addEventListener("click", startSpawning);
 					return;
 				}
 				
-				// Mode normal ou arrêté
-				if (bookSpawnSpeed === 0 || this.bookIndex >= this.bookPositions.length) return;
+				// Mode arrêté
+				if (bookSpawnSpeed === 0) return;
 				
 				// Calculer l'intervalle ajusté par la vitesse
 				const adjustedInterval = this.data.baseInterval / bookSpawnSpeed;
 				
-				if (time - this.lastSpawnTime > adjustedInterval) {
-					this.spawnBook();
-					this.lastSpawnTime = time;
+				// Continuer à spawner les livres jusqu'à la limite
+				if (this.bookIndex < this.bookPositions.length) {
+					if (time - this.lastSpawnTime > adjustedInterval) {
+						this.spawnBook();
+						this.lastSpawnTime = time;
+					}
 				}
+				// Si tous les livres sont placés, déclencher la chute
+				else if (!this.bookHasFallen && !this.fallScheduled) {
+					this.fallScheduled = true;
+					var comp = this;
+					console.log("🎯 TOUS LES LIVRES PLACES!");
+					console.log("   - Nombre de livres:", this.books.length);
+					console.log("   - BookIndex:", this.bookIndex);
+					console.log("   - Positions totales:", this.bookPositions.length);
+					console.log("⏱️  Chute programmée dans 2 secondes...");
+					
+					setTimeout(function() {
+						console.log("⏰ Timer écoulé! Vérifications:");
+						console.log("   - bookHasFallen:", comp.bookHasFallen);
+						console.log("   - Nombre de livres:", comp.books.length);
+						
+						if (!comp.bookHasFallen && comp.books.length > 0) {
+							console.log("✅ Conditions OK - Lancement de la chute!");
+							comp.doBookFall();
+						} else {
+							console.log("❌ Conditions pas remplies - Chute annulée");
+						}
+					}, 2000);
+				}
+			},
+			
+			// Faire tomber un livre
+			doBookFall: function() {
+				if (this.books.length === 0 || this.bookHasFallen) {
+					console.log("Abandon chute - books:", this.books.length, "fallen:", this.bookHasFallen);
+					return;
+				}
+				
+				console.log("=== CHUTE DU LIVRE ===");
+				
+				// Choisir un livre aléatoire
+				var idx = Math.floor(Math.random() * this.books.length);
+				var book = this.books[idx];
+				
+				this.fallenBookIndex = idx;
+				this.fallenBook = book;
+				
+				// Sauvegarder position originale
+				var pos = book.object3D.position;
+				this.fallenBookOriginalPos = { x: pos.x, y: pos.y, z: pos.z };
+				
+				console.log("Livre", idx, "tombe de", pos.x, pos.y, pos.z);
+				
+				// Nouvelle position au sol (devant le joueur - position z positive)
+				var newY = 0.08;
+				var newZ = 0; // Devant le joueur (position centrale)
+				var newX = 1 + (Math.random() * 0.3 - 0.15); // Légèrement à gauche ou à droite
+				
+				// Jouer le son de chute
+				this.playBookFallSound();
+				
+				// Appliquer animation
+				book.setAttribute("animation__bookfall", {
+					property: "position",
+					to: newX + " " + newY + " " + newZ,
+					dur: 2000,
+					easing: "easeOutElastic"
+				});
+				
+				book.setAttribute("animation__bookrotate", {
+					property: "rotation", 
+					to: "0 -90 90",
+					dur: 1500,
+					easing: "easeOutQuad"
+				});
+				
+				this.bookHasFallen = true;
+				console.log("Animation de chute lancée!");
+			},
+			
+			// Jouer un son de chute de livre
+			playBookFallSound: function() {
+				try {
+					var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+					
+					// Créer un son de chute (bruit basse fréquence + impact)
+					var oscillator = audioCtx.createOscillator();
+					var gainNode = audioCtx.createGain();
+					
+					oscillator.connect(gainNode);
+					gainNode.connect(audioCtx.destination);
+					
+					// Bruit d'impact grave
+					oscillator.frequency.value = 80;
+					oscillator.type = 'sine';
+					
+					// Envelope pour simuler un impact
+					gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+					gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+					
+					oscillator.start(audioCtx.currentTime);
+					oscillator.stop(audioCtx.currentTime + 0.3);
+					
+					// Ajouter un deuxième son pour le "thud"
+					var oscillator2 = audioCtx.createOscillator();
+					var gainNode2 = audioCtx.createGain();
+					
+					oscillator2.connect(gainNode2);
+					gainNode2.connect(audioCtx.destination);
+					
+					oscillator2.frequency.value = 120;
+					oscillator2.type = 'triangle';
+					
+					gainNode2.gain.setValueAtTime(0.2, audioCtx.currentTime + 1.1);
+					gainNode2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.3);
+					
+					oscillator2.start(audioCtx.currentTime + 1.1);
+					oscillator2.stop(audioCtx.currentTime + 1.3);
+				} catch(e) {
+					console.log("Erreur audio:", e);
+				}
+			},
+			
+			// Remettre le livre tombé en place (rewind)
+			unFallBook: function() {
+				if (!this.fallenBook || !this.fallenBookOriginalPos) return;
+				
+				var origPos = this.fallenBookOriginalPos;
+				var book = this.fallenBook;
+				
+				console.log("Remise en place du livre");
+				
+				// Animation inverse
+				book.removeAttribute("animation__bookfall");
+				book.removeAttribute("animation__bookrotate");
+				
+				book.setAttribute("animation__bookunfall", {
+					property: "position",
+					to: origPos.x + " " + origPos.y + " " + origPos.z,
+					dur: 600,
+					easing: "easeOutQuad"
+				});
+				
+				book.setAttribute("animation__bookunrotate", {
+					property: "rotation",
+					to: "0 -90 0",
+					dur: 600,
+					easing: "easeInOutQuad"
+				});
+				
+				this.bookHasFallen = false;
+				this.fallenBook = null;
+				this.fallenBookIndex = -1;
+				this.fallenBookOriginalPos = null;
 			},
 			removeBook() {
 				if (this.books.length === 0) return;
@@ -346,7 +508,7 @@ document.addEventListener("click", startSpawning);
 						property: "position",
 						to: `${pos.x} ${pos.y} ${pos.z}`,
 						dur: 800,
-						easing: "easeOutBounce",
+						easing: "easeOutElastic",
 						delay: 200
 					});
 				}, 50);
@@ -597,6 +759,7 @@ document.addEventListener("click", startSpawning);
 		<!-- Assets - ne bloque pas la scène si les modèles mettent du temps -->
 		<a-assets timeout="10000">
 			<img id="space360" src="./space360.jpg" crossorigin="anonymous">
+			<img id="metal-texture" src="./Poliigon_MetalPaintedMatte_7037_Preview1.png" crossorigin="anonymous">
 		</a-assets>
 
 		<!-- Éclairage ambiant -->
@@ -612,22 +775,22 @@ document.addEventListener("click", startSpawning);
 		<a-entity id="zone-left" position="-1.8 0.01 0" 
 			time-zone="mode: rewind; radius: 0.55; lightSpeed: 4000; needleSpeed: 2000">
 			
-			<!-- Anneau violet -->
-			<a-ring radius-inner="0.45" radius-outer="0.52" rotation="-90 0 0" 
-				material="color: #6a5acd; opacity: 0.9; metalness: 0.6"></a-ring>
-			<a-ring radius-inner="0.22" radius-outer="0.24" rotation="-90 0 0" 
-				material="color: #6a5acd; opacity: 0.6"></a-ring>
+			<!-- Anneau violet avec texture métal -->
+			<a-ring radius-inner="0.42" radius-outer="0.55" rotation="-90 0 0" 
+				material="src: #metal-texture; color: #6a5acd; opacity: 0.9; metalness: 0.4; roughness: 0.55"></a-ring>
+			<a-ring radius-inner="0.18" radius-outer="0.26" rotation="-90 0 0" 
+				material="src: #metal-texture; color: #6a5acd; opacity: 0.6; metalness: 0.4; roughness: 0.55"></a-ring>
 			
 			<!-- Aiguille des minutes (longue, rapide) -->
 			<a-entity id="needle-minute-left" position="0 0.03 0" rotation="0 0 0">
-				<a-box width="0.40" height="0.008" depth="0.012" position="0.17 0 0" 
-					material="color: #6a5acd; metalness: 0.8"></a-box>
+				<a-box width="0.40" height="0.015" depth="0.020" position="0.17 0 0" 
+					material="src: #metal-texture; color: #6a5acd; metalness: 0.4; roughness: 0.55"></a-box>
 			</a-entity>
 			
 			<!-- Aiguille des heures (courte, lente) -->
 			<a-entity id="needle-hour-left" position="0 0.05 0" rotation="0 90 0">
-				<a-box width="0.28" height="0.012" depth="0.016" position="0.10 0 0" 
-					material="color: #483d8b; metalness: 0.8"></a-box>
+				<a-box width="0.28" height="0.020" depth="0.025" position="0.10 0 0" 
+					material="src: #metal-texture; color: #483d8b; metalness: 0.4; roughness: 0.55"></a-box>
 			</a-entity>
 		</a-entity>
 
@@ -647,22 +810,22 @@ document.addEventListener("click", startSpawning);
 		<a-entity id="zone-right" position="1.8 0.01 0" 
 			time-zone="mode: fast; radius: 0.55; lightSpeed: 1500; needleSpeed: 800">
 			
-			<!-- Anneau rose -->
-			<a-ring radius-inner="0.45" radius-outer="0.52" rotation="-90 0 0" 
-				material="color: #e85f8d; opacity: 0.9; metalness: 0.6"></a-ring>
-			<a-ring radius-inner="0.22" radius-outer="0.24" rotation="-90 0 0" 
-				material="color: #e85f8d; opacity: 0.6"></a-ring>
+			<!-- Anneau rose avec texture métal -->
+			<a-ring radius-inner="0.42" radius-outer="0.55" rotation="-90 0 0" 
+				material="src: #metal-texture; color: #e85f8d; opacity: 0.9; metalness: 0.4; roughness: 0.55"></a-ring>
+			<a-ring radius-inner="0.18" radius-outer="0.26" rotation="-90 0 0" 
+				material="src: #metal-texture; color: #e85f8d; opacity: 0.6; metalness: 0.4; roughness: 0.55"></a-ring>
 			
 			<!-- Aiguille des minutes (longue, rapide) -->
 			<a-entity id="needle-minute-right" position="0 0.03 0" rotation="0 0 0">
-				<a-box width="0.40" height="0.008" depth="0.012" position="0.17 0 0" 
-					material="color: #e85f8d; metalness: 0.8"></a-box>
+				<a-box width="0.40" height="0.015" depth="0.020" position="0.17 0 0" 
+					material="src: #metal-texture; color: #e85f8d; metalness: 0.4; roughness: 0.55"></a-box>
 			</a-entity>
 			
 			<!-- Aiguille des heures (courte, lente) -->
 			<a-entity id="needle-hour-right" position="0 0.05 0" rotation="0 90 0">
-				<a-box width="0.28" height="0.012" depth="0.016" position="0.10 0 0" 
-					material="color: #d04a78; metalness: 0.8"></a-box>
+				<a-box width="0.28" height="0.020" depth="0.025" position="0.10 0 0" 
+					material="src: #metal-texture; color: #d04a78; metalness: 0.4; roughness: 0.55"></a-box>
 			</a-entity>
 		</a-entity>
 
@@ -691,22 +854,22 @@ document.addEventListener("click", startSpawning);
 		<a-entity id="zone-center" position="0 0.01 0" 
 			time-zone="mode: stop; radius: 0.55; lightSpeed: 9000; needleSpeed: 6000">
 			
-			<!-- Anneau doré -->
-			<a-ring radius-inner="0.45" radius-outer="0.52" rotation="-90 0 0" 
-				material="color: #d9b066; opacity: 0.9; metalness: 0.6"></a-ring>
-			<a-ring radius-inner="0.22" radius-outer="0.24" rotation="-90 0 0" 
-				material="color: #d9b066; opacity: 0.6"></a-ring>
+			<!-- Anneau doré avec texture métal -->
+			<a-ring radius-inner="0.42" radius-outer="0.55" rotation="-90 0 0" 
+				material="src: #metal-texture; color: #d9b066; opacity: 0.9; metalness: 0.4; roughness: 0.55"></a-ring>
+			<a-ring radius-inner="0.18" radius-outer="0.26" rotation="-90 0 0" 
+				material="src: #metal-texture; color: #d9b066; opacity: 0.6; metalness: 0.4; roughness: 0.55"></a-ring>
 			
 			<!-- Aiguille des minutes (longue, rapide) -->
 			<a-entity id="needle-minute-center" position="0 0.03 0" rotation="0 0 0">
-				<a-box width="0.40" height="0.008" depth="0.012" position="0.17 0 0" 
-					material="color: #d9b066; metalness: 0.8"></a-box>
+				<a-box width="0.40" height="0.015" depth="0.020" position="0.17 0 0" 
+					material="src: #metal-texture; color: #d9b066; metalness: 0.4; roughness: 0.55"></a-box>
 			</a-entity>
 			
 			<!-- Aiguille des heures (courte, lente) -->
 			<a-entity id="needle-hour-center" position="0 0.05 0" rotation="0 90 0">
-				<a-box width="0.28" height="0.012" depth="0.016" position="0.10 0 0" 
-					material="color: #c9a050; metalness: 0.8"></a-box>
+				<a-box width="0.28" height="0.020" depth="0.025" position="0.10 0 0" 
+					material="src: #metal-texture; color: #c9a050; metalness: 0.4; roughness: 0.55"></a-box>
 			</a-entity>
 		</a-entity>
 
