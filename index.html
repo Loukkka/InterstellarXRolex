@@ -67,68 +67,82 @@
 			const skybox = document.getElementById("skybox");
 			if (!skybox) return;
 			
-			// Retirer toutes les animations existantes
+			// Récupérer l'état actuel de rotation et scale
+			const currentRotation = skybox.getAttribute("rotation");
+			const currentScale = skybox.getAttribute("scale");
+			
+			// Construire les valeurs "from" à partir de l'état actuel
+			const fromRotation = `${currentRotation.x} ${currentRotation.y} ${currentRotation.z}`;
+			const fromScale = `${currentScale.x} ${currentScale.y} ${currentScale.z}`;
+			
+			// Retirer les animations existantes pour éviter les conflits
 			skybox.removeAttribute("animation");
 			skybox.removeAttribute("animation__rotation");
 			
-			if (mode === "stop") {
-				// Mode stop : arrêter toutes les animations
-				return;
-			} else if (mode === "rewind") {
-				// Mode rewind : rotation et scale inversés
-				skybox.setAttribute("animation", {
-					property: "scale",
-					to: "1.3 1.2 1.8",
-					dur: 8000,
-					dir: "alternate",
-					loop: true,
-					easing: "linear"
-				});
-				skybox.setAttribute("animation__rotation", {
-					property: "rotation",
-					from: "0 -90 0",
-					to: "-360 90 -360",
-					dur: 60000,
-					loop: true,
-					easing: "linear"
-				});
-			} else if (mode === "fast") {
-				// Mode fast : rotation et scale plus rapides
-				skybox.setAttribute("animation", {
-					property: "scale",
-					to: "1.3 1.2 1.8",
-					dur: 4000,
-					dir: "alternate",
-					loop: true,
-					easing: "linear"
-				});
-				skybox.setAttribute("animation__rotation", {
-					property: "rotation",
-					from: "0 -90 0",
-					to: "720 450 720",
-					dur: 30000,
-					loop: true,
-					easing: "linear"
-				});
-			} else if (mode === "normal") {
-				// Mode normal : reprendre les animations par défaut
-				skybox.setAttribute("animation", {
-					property: "scale",
-					to: "1.3 1.2 1.8",
-					dur: 8000,
-					dir: "alternate",
-					loop: true,
-					easing: "linear"
-				});
-				skybox.setAttribute("animation__rotation", {
-					property: "rotation",
-					from: "0 -90 0",
-					to: "360 270 360",
-					dur: 60000,
-					loop: true,
-					easing: "linear"
-				});
-			}
+			// Petit délai pour laisser le temps aux anciennes animations de s'arrêter
+			setTimeout(() => {
+				if (mode === "stop") {
+					// Mode stop : arrêter toutes les animations (déjà supprimées ci-dessus)
+					return;
+				} else if (mode === "rewind") {
+					// Mode rewind : rotation et scale inversés
+					skybox.setAttribute("animation", {
+						property: "scale",
+						from: fromScale,
+						to: "1.3 1.2 1.8",
+						dur: 8000,
+						dir: "alternate",
+						loop: true,
+						easing: "easeInOutSine"
+					});
+					skybox.setAttribute("animation__rotation", {
+						property: "rotation",
+						from: fromRotation,
+						to: "-360 90 -360",
+						dur: 60000,
+						loop: true,
+						easing: "easeInOutQuad"
+					});
+				} else if (mode === "fast") {
+					// Mode fast : rotation et scale plus rapides
+					skybox.setAttribute("animation", {
+						property: "scale",
+						from: fromScale,
+						to: "1.3 1.2 1.8",
+						dur: 4000,
+						dir: "alternate",
+						loop: true,
+						easing: "easeInOutSine"
+					});
+					skybox.setAttribute("animation__rotation", {
+						property: "rotation",
+						from: fromRotation,
+						to: "720 450 720",
+						dur: 30000,
+						loop: true,
+						easing: "easeInOutQuad"
+					});
+				} else if (mode === "normal") {
+					// Mode normal : reprendre les animations par défaut
+					skybox.setAttribute("animation", {
+						property: "scale",
+						from: fromScale,
+						to: "1.3 1.2 1.8",
+						dur: 8000,
+						dir: "alternate",
+						loop: true,
+						easing: "easeInOutSine"
+					});
+					skybox.setAttribute("animation__rotation", {
+						property: "rotation",
+						from: fromRotation,
+						to: "360 270 360",
+						dur: 60000,
+						loop: true,
+						easing: "easeInOutQuad"
+					});
+				}
+			}, 100);
 		}
 
 		// === BOOKSHELF: Contrôle la vitesse d'apparition des livres ===
@@ -247,12 +261,7 @@
 				osc1.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.5);
 				osc1.type = 'sine';
 				
-				gain1.gain.setValueAtTime(0.3, audioCtx.currentTime);
-				gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
-				
-				osc1.start(audioCtx.currentTime);
-				osc1.stop(audioCtx.currentTime + 0.6);
-				
+			gain1.gain.setValueAtTime(0.08, audioCtx.currentTime);
 				// Deuxième oscillateur pour effet de "whoosh"
 				var osc2 = audioCtx.createOscillator();
 				var gain2 = audioCtx.createGain();
@@ -263,11 +272,7 @@
 				osc2.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
 				osc2.type = 'triangle';
 				
-				gain2.gain.setValueAtTime(0.2, audioCtx.currentTime);
-				gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-				
-				osc2.start(audioCtx.currentTime);
-				osc2.stop(audioCtx.currentTime + 0.5);
+			gain2.gain.setValueAtTime(0.05, audioCtx.currentTime);
 				
 			} catch(e) {
 				console.log("Erreur audio shrink:", e);
@@ -338,7 +343,7 @@
 				from: "1 1 1",
 				to: "0.05 0.05 0.05",
 				dur: 1000,
-				easing: "easeInCubic"
+				easing: "linear"
 			});
 			
 			// Animation de l'effet tunnel (fondu progressif pendant le rétrécissement)
@@ -1494,12 +1499,6 @@
 				position="0 0 0" rotation="-90 0 0"></a-entity>
 		</a-entity>
 
-		<!-- Pile de livres (modèle 3D) sur cercle rewind -->
-		<a-entity id="books" position="-1.8 0 0">
-			<a-gltf-model src="./stack_of_books.glb" shadow="cast: true; receive: true" 
-				scale="0.15 0.15 0.15" position="0 0.10 0"></a-gltf-model>
-		</a-entity>
-
 		<!-- ========== CERCLE DROIT (FAST) ========== -->
 		<a-entity id="zone-right" position="1.8 0.01 0" 
 			time-zone="mode: fast; radius: 0.55; lightSpeed: 1500; needleSpeed: 800">
@@ -1527,12 +1526,6 @@
 		<a-entity id="light-right" position="1.8 1.2 0">
 			<a-entity light="type: spot; color: #ff80a0; intensity: 0; angle: 45; penumbra: 0.5; castShadow: true" 
 				position="0 0 0" rotation="-90 0 0"></a-entity>
-		</a-entity>
-
-		<!-- Casque astronaute (modèle 3D) -->
-		<a-entity id="helmet" position="1.8 0 0">
-			<a-gltf-model src="./astronaut_helmet.glb" shadow="cast: true; receive: true" 
-				scale="0.018 0.018 0.018" position="0 0.0 0" rotation="-15 0 0"></a-gltf-model>
 		</a-entity>
 
 		<!-- ========== BOOKCASE (MODÈLE 3D) ========== -->
@@ -1574,7 +1567,7 @@
 		</a-entity>
 
 		<!-- Caméra avec limites -->
-		<a-entity id="rig" position="0 0 1.5" boundary-limit>
+		<a-entity id="rig" position="0 0 1.5" boundary-limit movement-controls="controls: checkpoint, gamepad, keyboard, touch">
 			<a-camera wasd-controls="acceleration: 8" look-controls position="0 1.8 0">
 				<a-cursor color="#d9b066" fuse="false" raycaster="objects: .clickable-fallen-book, .pushable-book"></a-cursor>
 			</a-camera>
