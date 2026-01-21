@@ -349,8 +349,8 @@ document.addEventListener("click", startSpawning);
 				
 				// Tranche (spine) - partie visible sur l'étagère
 				const spine = document.createElement("a-box");
-				spine.setAttribute("width", "0.08");
-				spine.setAttribute("height", "0.25");
+				spine.setAttribute("width", "0.09");
+				spine.setAttribute("height", "0.255");
 				spine.setAttribute("depth", "0.02");
 				spine.setAttribute("position", "0 0 -0.09");
 				spine.setAttribute("material", `color: ${spineColor}; metalness: 0.2; roughness: 0.6`);
@@ -544,10 +544,14 @@ document.addEventListener("click", startSpawning);
 				}
 				
 				// Activer l'aiguille des minutes (rotation rapide) - SAUF en mode stop
+				// Sens horaire normal = négatif en Y (vue de dessus), rewind = positif
 				if (this.needleMinute && this.data.mode !== "stop") {
-					const rotDir = this.data.mode === "rewind" ? "-360" : "360";
+					const rotDir = this.data.mode === "rewind" ? "360" : "-360";
+					// Reset la rotation avant de relancer l'animation
+					this.needleMinute.setAttribute("rotation", "0 0 0");
 					this.needleMinute.setAttribute("animation__spin", {
 						property: "rotation",
+						from: "0 0 0",
 						to: "0 " + rotDir + " 0",
 						loop: true,
 						dur: this.data.needleSpeed,
@@ -557,9 +561,12 @@ document.addEventListener("click", startSpawning);
 				
 				// Activer l'aiguille des heures (12x plus lente) - SAUF en mode stop
 				if (this.needleHour && this.data.mode !== "stop") {
-					const rotDir = this.data.mode === "rewind" ? "-360" : "360";
+					const rotDir = this.data.mode === "rewind" ? "360" : "-360";
+					// Reset la rotation avant de relancer l'animation
+					this.needleHour.setAttribute("rotation", "0 0 0");
 					this.needleHour.setAttribute("animation__spin", {
 						property: "rotation",
+						from: "0 0 0",
 						to: "0 " + rotDir + " 0",
 						loop: true,
 						dur: this.data.needleSpeed * 12,
@@ -595,12 +602,14 @@ document.addEventListener("click", startSpawning);
 					});
 				}
 				
-				// Désactiver les aiguilles
+				// Désactiver les aiguilles et réinitialiser leur rotation
 				if (this.needleMinute) {
 					this.needleMinute.removeAttribute("animation__spin");
+					this.needleMinute.setAttribute("rotation", "0 0 0");
 				}
 				if (this.needleHour) {
 					this.needleHour.removeAttribute("animation__spin");
+					this.needleHour.setAttribute("rotation", "0 0 0");
 				}
 			}
 		});
