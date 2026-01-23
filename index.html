@@ -12,14 +12,22 @@
 	<script>
 		// === AUDIO HORLOGE: Gestion de la vitesse de lecture ===
 		let clockAudio = null;
+		let rewindAudio = null;
 		
 		document.addEventListener("DOMContentLoaded", () => {
 			clockAudio = document.getElementById("clock-audio");
 			clockAudio.volume = 1.0;
 			clockAudio.playbackRate = 1.0; // Vitesse normale par défaut
+
+			rewindAudio = document.getElementById("rewind-audio");
+			if (rewindAudio) rewindAudio.volume = 1.0;
 			
 			const startClockAudio = () => {
 				clockAudio.play().catch(e => console.log("Audio play prevented:", e));
+				
+				// Démarrer la boucle de son aléatoire
+				scheduleRandomSound();
+				
 				document.removeEventListener("click", startClockAudio);
 				document.removeEventListener("keydown", startClockAudio);
 			};
@@ -27,6 +35,42 @@
 			document.addEventListener("click", startClockAudio);
 			document.addEventListener("keydown", startClockAudio);
 		});
+		
+		// === RANDOM SFX: Sons aléatoires avec délai ===
+		function scheduleRandomSound() {
+			const sfx = document.getElementById("random-sfx");
+			if (!sfx) return;
+			
+			// Délai aléatoire (minimum 3-4 secondes + variation)
+			// "pas tout le temps" donc on met une plage assez large, ex: 10 à 25 secondes après la fin du précédent
+			// Le premier délai est plus court (3-4s) comme demandé
+			const isFirst = !sfx.played.length; 
+			const minDelay = isFirst ? 4000 : 15000; 
+			const randomDelay = Math.random() * 20000; // + 0 à 20 sec
+			
+			const delay = minDelay + randomDelay;
+			
+			console.log(`Prochain son aléatoire dans ${(delay/1000).toFixed(1)} sec`);
+			
+			setTimeout(() => {
+				// Vérifier si le son est en pause (ex: stop zone)
+				// Si on veut qu'il joue même en stop zone, on retire la condition
+				if (clockAudio && clockAudio.paused) {
+					// Si le temps est arrêté, on reporte
+					scheduleRandomSound();
+					return;
+				}
+				
+				sfx.volume = 0.3;
+				sfx.currentTime = 0;
+				sfx.play().catch(e => console.log("SFX play prevented:", e));
+				
+				// Une fois fini, on relance le timer
+				sfx.onended = function() {
+					scheduleRandomSound();
+				};
+			}, delay);
+		}
 		
 		// === AUDIO MANAGER: Contrôle la vitesse du son ===
 		function setClockSpeed(speed) {
@@ -45,6 +89,31 @@
 		function resumeClockAudio() {
 			if (clockAudio && clockAudio.paused) {
 				clockAudio.play().catch(e => console.log("Audio resume prevented:", e));
+			}
+		}
+
+		// === REWIND AUDIO ===
+		function startRewindAudio() {
+			if (rewindAudio) {
+				rewindAudio.currentTime = 0;
+				rewindAudio.play().catch(e => console.log("Rewind play prevented:", e));
+			}
+		}
+
+		function stopRewindAudio() {
+			if (rewindAudio) {
+				rewindAudio.pause();
+				rewindAudio.currentTime = 0;
+			}
+		}
+
+		// === SHRINK AUDIO ===
+		function playShrinkAudio() {
+			var audio = document.getElementById("shrink-sfx");
+			if (audio) {
+				audio.volume = 0.8;
+				audio.currentTime = 0;
+				audio.play().catch(e => console.log("Shrink play prevented:", e));
 			}
 		}
 
@@ -169,29 +238,10 @@
 				teleportInsideBookcase();
 			}, 2000);
 		}
-		
 		function playRewindEffect() {
-			// Faire tourner les aiguilles à l'envers très vite
-			var needles = ["needle-minute-left", "needle-minute-right", "needle-minute-center",
-						   "needle-hour-left", "needle-hour-right", "needle-hour-center"];
-			
-			needles.forEach(function(id) {
-				var needle = document.getElementById(id);
-				if (needle) {
-					needle.setAttribute("animation__rewind", {
-						property: "rotation",
-						to: "0 720 0",
-						dur: 1500,
-						easing: "easeInOutQuad"
-					});
-				}
-			});
 			
 			// Contracter l'espace
 			setSpaceScale(0.3, 1500);
-			
-			// Son de rewind
-			playRewindSound();
 			
 			// Flash lumineux
 			var flash = document.createElement("a-plane");
@@ -222,63 +272,6 @@
 			}, 600);
 		}
 		
-		function playRewindSound() {
-			try {
-				var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-				var oscillator = audioCtx.createOscillator();
-				var gainNode = audioCtx.createGain();
-				
-				oscillator.connect(gainNode);
-				gainNode.connect(audioCtx.destination);
-				
-				// Son montant (effet rewind)
-				oscillator.frequency.setValueAtTime(100, audioCtx.currentTime);
-				oscillator.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 1.5);
-				oscillator.type = 'sawtooth';
-				
-				gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-				gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
-				
-				oscillator.start(audioCtx.currentTime);
-				oscillator.stop(audioCtx.currentTime + 1.5);
-			} catch(e) {
-				console.log("Erreur audio rewind:", e);
-			}
-		}
-		
-		function playShrinkSound() {
-			try {
-				var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-				
-				// Son descendant (effet de rétrécissement/aspiration)
-				var osc1 = audioCtx.createOscillator();
-				var gain1 = audioCtx.createGain();
-				osc1.connect(gain1);
-				gain1.connect(audioCtx.destination);
-				
-				// Fréquence qui descend rapidement
-				osc1.frequency.setValueAtTime(600, audioCtx.currentTime);
-				osc1.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.5);
-				osc1.type = 'sine';
-				
-			gain1.gain.setValueAtTime(0.08, audioCtx.currentTime);
-				// Deuxième oscillateur pour effet de "whoosh"
-				var osc2 = audioCtx.createOscillator();
-				var gain2 = audioCtx.createGain();
-				osc2.connect(gain2);
-				gain2.connect(audioCtx.destination);
-				
-				osc2.frequency.setValueAtTime(400, audioCtx.currentTime);
-				osc2.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
-				osc2.type = 'triangle';
-				
-			gain2.gain.setValueAtTime(0.05, audioCtx.currentTime);
-				
-			} catch(e) {
-				console.log("Erreur audio shrink:", e);
-			}
-		}
-		
 		function teleportInsideBookcase() {
 			var rig = document.getElementById("rig");
 			var camera = document.querySelector("a-camera");
@@ -292,33 +285,33 @@
 			projectionOverlay.setAttribute("width", "10");
 			projectionOverlay.setAttribute("height", "10");
 			projectionOverlay.setAttribute("position", "0 0 -0.5");
-			projectionOverlay.setAttribute("material", "shader: flat; color: #0a0a1f; opacity: 0; transparent: true");
+			projectionOverlay.setAttribute("material", "shader: flat; color: #000000; opacity: 0; transparent: true");
 			camera.appendChild(projectionOverlay);
 			
 			// Créer un effet de vortex/tunnel (sans mouvement de caméra)
-			for (var i = 0; i < 8; i++) {
+			for (var i = 0; i < 12; i++) {
 				var ring = document.createElement("a-ring");
 				ring.setAttribute("radius-inner", (0.2 + i * 0.3));
 				ring.setAttribute("radius-outer", (0.25 + i * 0.3));
 				ring.setAttribute("position", "0 0 " + (-0.3 - i * 0.08));
-				ring.setAttribute("material", "shader: flat; color: #00ffff; opacity: 0.7; transparent: true");
+				ring.setAttribute("material", "shader: flat; color: #4488ff; opacity: 0.6; transparent: true");
 				ring.setAttribute("class", "tunnel-ring");
 				
 				// Animation de zoom vers l'intérieur (attraction)
 				ring.setAttribute("animation__zoom", {
 					property: "scale",
-					from: "8 8 1",
-					to: "0.05 0.05 1",
-					dur: 1000 + i * 50,
-					easing: "easeInCubic"
+					from: "6 6 1",
+					to: "0.01 0.01 1",
+					dur: 1500 + i * 50,
+					easing: "easeInExpo"
 				});
 				
 				// Animation de fondu
 				ring.setAttribute("animation__fade", {
 					property: "material.opacity",
-					from: 0.9,
+					from: 0.8,
 					to: 0,
-					dur: 1000 + i * 50,
+					dur: 1500 + i * 50,
 					easing: "easeInQuad"
 				});
 				
@@ -326,41 +319,51 @@
 				ring.setAttribute("animation__rotate", {
 					property: "rotation",
 					from: "0 0 0",
-					to: "0 0 " + (i % 2 === 0 ? 360 : -360),
-					dur: 1200,
-					easing: "easeInOutQuad"
+					to: "0 0 " + (i % 2 === 0 ? 720 : -720),
+					dur: 1500,
+					easing: "easeInCubic"
 				});
 				
 				camera.appendChild(ring);
 			}
 			
-			// Jouer son de rétrécissement dès le début
-			playShrinkSound();
+			// Jouer son de rétrécissement (violon) avant l'animation
+			playShrinkAudio();
 			
 			// PHASE 1: Rétrécir progressivement AVANT de téléporter
+			// Utilisation de easeInExpo pour un effet d'aspiration soudaine
 			rig.setAttribute("animation__shrink", {
 				property: "scale",
 				from: "1 1 1",
 				to: "0.05 0.05 0.05",
-				dur: 1000,
-				easing: "linear"
+				dur: 1500,
+				easing: "easeInExpo"
 			});
 			
-			// Animation de l'effet tunnel (fondu progressif pendant le rétrécissement)
+			// Ajout : Mouvement vers la bibliothèque pour donner l'impression d'être aspiré
+			rig.setAttribute("animation__suck", {
+				property: "position",
+				to: "-0.3 1.5 -1.5",
+				dur: 1500,
+				easing: "easeInExpo"
+			});
+			
+			// Animation de l'effet tunnel (fondu progressif vers le noir)
 			projectionOverlay.setAttribute("animation__fade", {
 				property: "material.opacity",
 				from: 0,
 				to: 1,
-				dur: 900,
+				dur: 1400,
 				easing: "easeInQuad"
 			});
 			
 			// PHASE 2: Une fois petit, téléporter instantanément
 			setTimeout(function() {
 				// Téléportation instantanée maintenant qu'on est tout petit
+				rig.removeAttribute("animation__suck"); // Arrêter l'animation de mouvement
 				rig.object3D.position.set(-0.3, 2.1, -2.4);
 				console.log("Téléportation effectuée");
-			}, 1000);
+			}, 1500);
 			
 			// Fade out après téléportation
 			setTimeout(function() {
@@ -368,10 +371,10 @@
 					property: "material.opacity",
 					from: 1,
 					to: 0,
-					dur: 400,
+					dur: 1000,
 					easing: "easeOutQuad"
 				});
-			}, 1100);
+			}, 1600);
 			
 			// Remettre l'espace à la normale
 			setTimeout(function() {
@@ -400,7 +403,7 @@
 				
 				console.log("Vous êtes maintenant DANS la bibliothèque!");
 				console.log("Cliquez sur un livre pour le faire tomber...");
-			}, 1200);
+			}, 1800);
 		}
 		
 		function exitTesseract() {
@@ -685,7 +688,9 @@
 				var newY = this.fallTargetY + (bookHeight / 2);
 				var newZ = this.fallTargetZ;
 				
-				// Jouer le son de chute
+// Jouer le son de chute (fichier mp3)
+			this.playFallBookAudio();
+			// + son synthétisé en arrière-plan
 				this.playBookFallSound();
 				
 				// Appliquer animation
@@ -831,7 +836,7 @@
 					console.log("📖 LIVRE TOMBE!");
 					
 					// Son de chute
-					this.playBookFallSound();
+				this.playFallBookAudio();
 					
 					// Récupérer dimensions
 					var bookHeight = 0.25;
@@ -882,7 +887,17 @@
 				}
 			},
 			
-			// Jouer un son de chute de livre
+			// Jouer le fichier audio de chute de livre
+			playFallBookAudio: function() {
+				var audio = document.getElementById("fall-book-sfx");
+				if (audio) {
+					audio.volume = 0.7;
+					audio.currentTime = 0;
+					audio.play().catch(e => console.log("Fall book play prevented:", e));
+				}
+			},
+			
+			// Jouer un son de chute de livre (synthétisé)
 			playBookFallSound: function() {
 				try {
 					var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1348,7 +1363,8 @@
 					setBookSpawnSpeed(4.0); // Livres apparaissent rapidement
 					setSkyboxAnimation("fast"); // Animation plus rapide
 				} else if (this.data.mode === "rewind") {
-					setClockSpeed(0.5); // Son ralenti (effet rewind)
+					pauseClockAudio(); // Arrêter le son normal
+					startRewindAudio(); // Jouer le son spécial rewind
 					setSpaceScale(0.8, 1500); // Légère contraction
 					setBookSpawnSpeed(-2.0); // Livres disparaissent (négatif = rewind)
 					setSkyboxAnimation("rewind"); // Animation sens inverse
@@ -1405,6 +1421,12 @@
 			leaveZone() {
 				console.log("LEAVE:", this.data.mode);
 				
+				// Si on quitte la zone rewind, arrêter son spécial et reprendre normal
+				if (this.data.mode === "rewind") {
+					stopRewindAudio();
+					resumeClockAudio();
+				}
+
 				// Si on quitte la zone stop, reprendre le son
 				if (this.data.mode === "stop") {
 					resumeClockAudio();
@@ -1450,6 +1472,22 @@
 	<!-- Son d'horloge en fond -->
 	<audio id="clock-audio" loop>
 		<source src="./Echoing Clock Tick  HQ Sound Effect (online-video-cutter.com).mp3" type="audio/mpeg">
+	</audio>
+	<!-- Son aléatoire (Attack on Titan) -->
+	<audio id="random-sfx">
+		<source src="./Attack on Titan Season 1 Episode Title Sound Effect.mp3" type="audio/mpeg">
+	</audio>
+	<!-- Son Rewind -->
+	<audio id="rewind-audio" loop>
+		<source src="./horloge rewind en mp3.mp3" type="audio/mpeg">
+	</audio>
+	<!-- Son Chute de Livre -->
+	<audio id="fall-book-sfx">
+		<source src="./fall book.mp3" type="audio/mpeg">
+	</audio>
+	<!-- Son Rétrécissement -->
+	<audio id="shrink-sfx">
+		<source src="./violin-glissando-10-97632.mp3" type="audio/mpeg">
 	</audio>
 
 	<a-scene shadow="type: pcfsoft" renderer="colorManagement: true; exposure: 1.2">
