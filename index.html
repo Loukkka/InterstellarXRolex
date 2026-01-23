@@ -1210,6 +1210,107 @@
 			}
 		});
 
+		// === VR CONTROLLER LOCOMOTION: Déplacement avec les joysticks des manettes VR ===
+		AFRAME.registerComponent("vr-controller-movement", {
+			schema: {
+				speed: { type: "number", default: 2.5 },
+				rotationSpeed: { type: "number", default: 60 }
+			},
+			init() {
+				this.velocity = new THREE.Vector3();
+				this.direction = new THREE.Vector3();
+				this.rotation = 0;
+				
+				// Bindé aux contrôleurs
+				this.el.sceneEl.addEventListener("controllerconnected", (evt) => {
+					console.log("VR Controller connecté:", evt.detail.name);
+				});
+			},
+			tick(time, delta) {
+				if (!delta) return;
+				
+				const deltaSeconds = delta / 1000;
+				const data = this.data;
+				
+				// Récupérer les gamepads VR
+				const gamepads = navigator.getGamepads();
+				if (!gamepads) return;
+				
+				let leftStickX = 0, leftStickY = 0;
+				let rightStickX = 0;
+				
+				// Parcourir les gamepads pour trouver les contrôleurs VR
+				for (let i = 0; i < gamepads.length; i++) {
+					const gamepad = gamepads[i];
+					if (!gamepad) continue;
+					
+					// Vérifier si c'est un contrôleur VR (Oculus, Vive, etc.)
+					const isVRController = gamepad.id.toLowerCase().includes('oculus') ||
+						gamepad.id.toLowerCase().includes('openvr') ||
+						gamepad.id.toLowerCase().includes('vive') ||
+						gamepad.id.toLowerCase().includes('windows mixed reality') ||
+						gamepad.id.toLowerCase().includes('spatial controller');
+					
+					if (isVRController && gamepad.axes.length >= 2) {
+						// Main gauche (généralement gamepad[0]) - axes 2,3 pour mouvement
+						if (gamepad.hand === 'left' || i === 0) {
+							leftStickX = Math.abs(gamepad.axes[2]) > 0.15 ? gamepad.axes[2] : 0;
+							leftStickY = Math.abs(gamepad.axes[3]) > 0.15 ? gamepad.axes[3] : 0;
+						}
+						// Main droite (généralement gamepad[1]) - axes 2,3 pour rotation
+						if (gamepad.hand === 'right' || i === 1) {
+							rightStickX = Math.abs(gamepad.axes[2]) > 0.15 ? gamepad.axes[2] : 0;
+						}
+					}
+				}
+				
+				// Pas de mouvement si pas d'input
+				if (leftStickX === 0 && leftStickY === 0 && rightStickX === 0) {
+					return;
+				}
+				
+				// Calculer le déplacement
+				const cameraEl = this.el.querySelector('a-camera') || this.el.sceneEl.camera.el;
+				if (!cameraEl) return;
+				
+				// Obtenir la rotation actuelle de la caméra (seulement Y pour le déplacement horizontal)
+				const cameraRotation = cameraEl.getAttribute('rotation');
+				const yaw = THREE.MathUtils.degToRad(cameraRotation.y);
+				
+				// Rotation avec joystick droit
+				if (rightStickX !== 0) {
+					const rotationDelta = rightStickX * data.rotationSpeed * deltaSeconds;
+					const currentRigRotation = this.el.getAttribute('rotation');
+					this.el.setAttribute('rotation', {
+						x: currentRigRotation.x,
+						y: currentRigRotation.y + rotationDelta,
+						z: currentRigRotation.z
+					});
+				}
+				
+				// Déplacement avec joystick gauche
+				if (leftStickX !== 0 || leftStickY !== 0) {
+					// Calculer direction basée sur la rotation de la caméra
+					const forward = -leftStickY; // Inverser Y car joystick vers le haut = valeur négative
+					const strafe = leftStickX;
+					
+					this.direction.set(strafe, 0, forward);
+					this.direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+					this.direction.normalize();
+					
+					// Appliquer le mouvement
+					const speed = data.speed * deltaSeconds;
+					const currentPos = this.el.getAttribute('position');
+					
+					this.el.setAttribute('position', {
+						x: currentPos.x + this.direction.x * speed,
+						y: currentPos.y,
+						z: currentPos.z + this.direction.z * speed
+					});
+				}
+			}
+		});
+
 		// === BOUNDARY: Bloque l'utilisateur dans le cube 4x4x4 ===
 		AFRAME.registerComponent("boundary-limit", {
 			schema: {
@@ -1605,10 +1706,28 @@
 		</a-entity>
 
 		<!-- Caméra avec limites -->
-		<a-entity id="rig" position="0 0 1.5" boundary-limit movement-controls="controls: checkpoint, gamepad, keyboard, touch">
+		<a-entity id="rig" position="0 0 1.5" boundary-limit vr-controller-movement="speed: 2.5; rotationSpeed: 60" movement-controls="controls: checkpoint, gamepad, keyboard, touch">
 			<a-camera wasd-controls="acceleration: 8" look-controls position="0 1.8 0">
 				<a-cursor color="#d9b066" fuse="false" raycaster="objects: .clickable-fallen-book, .pushable-book"></a-cursor>
 			</a-camera>
+			
+			<!-- Contrôleur VR gauche -->
+			<a-entity id="left-controller" 
+				oculus-touch-controls="hand: left" 
+				vive-controls="hand: left"
+				windows-motion-controls="hand: left"
+				laser-controls="hand: left"
+				raycaster="objects: .clickable-fallen-book, .pushable-book">
+			</a-entity>
+			
+			<!-- Contrôleur VR droit -->
+			<a-entity id="right-controller" 
+				oculus-touch-controls="hand: right" 
+				vive-controls="hand: right"
+				windows-motion-controls="hand: right"
+				laser-controls="hand: right"
+				raycaster="objects: .clickable-fallen-book, .pushable-book">
+			</a-entity>
 		</a-entity>
 	</a-scene>
 </body>
