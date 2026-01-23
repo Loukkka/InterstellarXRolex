@@ -560,19 +560,29 @@
 				const component = this;
 				bookshelfSpawnerRef = this; // Référence globale
 				
-				// Démarrer après un clic
+				// Démarrer après un clic OU automatiquement en VR
 				const startSpawning = function() {
-					// Délai de 5 secondes avant de commencer à faire apparaître les livres
-					setTimeout(function() {
-						component.started = true;
-						component.lastSpawnTime = performance.now();
-						component.buildShelf();
-						console.log("Les livres commencent à apparaître !");
-					}, 5000);
+					if (component.started) return; // Éviter double démarrage
+					
+					console.log("📚 Démarrage de l'apparition des livres...");
+					component.started = true;
+					component.lastSpawnTime = performance.now();
+					component.buildShelf();
+					console.log("Les livres commencent à apparaître !");
 					
 					document.removeEventListener("click", startSpawning);
 				};
+				
 				document.addEventListener("click", startSpawning);
+				
+				// Démarrage automatique en mode VR
+				const scene = this.el.sceneEl;
+				scene.addEventListener("enter-vr", () => {
+					console.log("🥽 Mode VR détecté - démarrage automatique");
+					setTimeout(() => {
+						startSpawning();
+					}, 1000); // 1 seconde au lieu de 5 pour VR
+				});
 			},
 					buildShelf() {
 				// L'étagère GLB est déjà construite, on peut commencer à spawner les livres
