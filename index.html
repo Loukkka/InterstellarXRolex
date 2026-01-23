@@ -1051,7 +1051,7 @@
 				cover.setAttribute("height", "0.25");
 				cover.setAttribute("depth", "0.18");
 				cover.setAttribute("position", "0.03 0 0");
-				cover.setAttribute("material", `color: ${color}; metalness: 0.1; roughness: 0.7`);
+				cover.setAttribute("material", `src: #book-pattern; color: ${color}; metalness: 0.1; roughness: 0.7`);
 				cover.setAttribute("shadow", "cast: true; receive: true");
 				book.appendChild(cover);
 				
@@ -1071,17 +1071,17 @@
 				back.setAttribute("height", "0.25");
 				back.setAttribute("depth", "0.18");
 				back.setAttribute("position", "-0.03 0 0");
-				back.setAttribute("material", `color: ${color}; metalness: 0.1; roughness: 0.7`);
+				back.setAttribute("material", `src: #book-pattern; color: ${color}; metalness: 0.1; roughness: 0.7`);
 				back.setAttribute("shadow", "cast: true; receive: true");
 				book.appendChild(back);
 				
 				// Tranche (spine) - partie visible sur l'étagère
 				const spine = document.createElement("a-box");
-				spine.setAttribute("width", "0.09");
-				spine.setAttribute("height", "0.255");
+				spine.setAttribute("width", "0.081");
+				spine.setAttribute("height", "0.251");
 				spine.setAttribute("depth", "0.02");
 				spine.setAttribute("position", "0 0 -0.09");
-				spine.setAttribute("material", `color: ${spineColor}; metalness: 0.2; roughness: 0.6`);
+				spine.setAttribute("material", `src: #book-pattern; color: ${spineColor}; metalness: 0.2; roughness: 0.6`);
 				spine.setAttribute("shadow", "cast: true; receive: true");
 				book.appendChild(spine);
 				
@@ -1633,6 +1633,7 @@
 		<a-assets timeout="10000">
 			<img id="space360" src="./bubbles-black-background (1).jpg" crossorigin="anonymous">
 			<img id="metal-texture" src="./Poliigon_MetalPaintedMatte_7037_Preview1.png" crossorigin="anonymous">
+			<img id="book-pattern" src="./book_pattern_disp_4k.png" crossorigin="anonymous">
 		</a-assets>
 
 		<!-- Éclairage ambiant -->
