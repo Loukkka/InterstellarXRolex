@@ -13,6 +13,7 @@
 		// === AUDIO HORLOGE: Gestion de la vitesse de lecture ===
 		let clockAudio = null;
 		let rewindAudio = null;
+		let backgroundMusic = null;
 		
 		let audioStarted = false;
 		
@@ -24,12 +25,24 @@
 			rewindAudio = document.getElementById("rewind-audio");
 			if (rewindAudio) rewindAudio.volume = 1.0;
 			
+			backgroundMusic = document.getElementById("background-music");
+			if (backgroundMusic) {
+				backgroundMusic.volume = 0.05; // Volume très faible
+				backgroundMusic.playbackRate = 0.5; // Ralenti à 0.25
+				backgroundMusic.loop = true; // Boucle activée
+			}
+			
 			const startClockAudio = () => {
 				if (audioStarted) return;
 				audioStarted = true;
 				
 				console.log("🎵 Démarrage de l'audio...");
 				clockAudio.play().catch(e => console.log("Audio play prevented:", e));
+				
+				// Démarrer la musique de fond
+				if (backgroundMusic) {
+					backgroundMusic.play().catch(e => console.log("Background music play prevented:", e));
+				}
 				
 				// Démarrer la boucle de son aléatoire
 				scheduleRandomSound();
@@ -101,11 +114,17 @@
 			if (clockAudio && !clockAudio.paused) {
 				clockAudio.pause();
 			}
+			if (backgroundMusic && !backgroundMusic.paused) {
+				backgroundMusic.pause();
+			}
 		}
 		
 		function resumeClockAudio() {
 			if (clockAudio && clockAudio.paused) {
 				clockAudio.play().catch(e => console.log("Audio resume prevented:", e));
+			}
+			if (backgroundMusic && backgroundMusic.paused) {
+				backgroundMusic.play().catch(e => console.log("Background music resume prevented:", e));
 			}
 		}
 
@@ -1501,7 +1520,9 @@
 					setBookSpawnSpeed(4.0); // Livres apparaissent rapidement
 					setSkyboxAnimation("fast"); // Animation plus rapide
 				} else if (this.data.mode === "rewind") {
-					pauseClockAudio(); // Arrêter le son normal
+					if (clockAudio && !clockAudio.paused) {
+						clockAudio.pause(); // Arrêter juste le son d'horloge
+					}
 					startRewindAudio(); // Jouer le son spécial rewind
 					setSpaceScale(0.8, 1500); // Légère contraction
 					setBookSpawnSpeed(-2.0); // Livres disparaissent (négatif = rewind)
@@ -1627,11 +1648,15 @@
 	<audio id="shrink-sfx">
 		<source src="./violin-glissando-10-97632.mp3" type="audio/mpeg">
 	</audio>
+	<!-- Son de fond - Octopus's Garden -->
+	<audio id="background-music" loop>
+		<source src="./592534__voxlab__octopussys-garden-synth-pad-dmin7-chord.wav" type="audio/wav">
+	</audio>
 
 	<a-scene shadow="type: pcfsoft" renderer="colorManagement: true; exposure: 1.2">
 		<!-- Assets - ne bloque pas la scène si les modèles mettent du temps -->
 		<a-assets timeout="10000">
-			<img id="space360" src="./bubbles-black-background (1).jpg" crossorigin="anonymous">
+			<img id="space360" src="./image2.png" crossorigin="anonymous">
 			<img id="metal-texture" src="./Poliigon_MetalPaintedMatte_7037_Preview1.png" crossorigin="anonymous">
 			<img id="book-pattern" src="./book_pattern_disp_4k.png" crossorigin="anonymous">
 		</a-assets>
